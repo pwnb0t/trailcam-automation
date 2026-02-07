@@ -2,6 +2,10 @@
 
 Reverse engineering a bluetooth Trail Cam.
 
+I'm using this camera:
+https://www.amazon.com/MAXDONE-Bluetooth-5200mAh-Rechargeable-Activated/dp/B0DHRYCZKF
+"MAXDONE Solar Trail Camera WiFi Bluetooth - 48MP 30fps Game Camera with 5200mAh Rechargeable Battery, 0.1s Trigger Speed Motion Activated Trail Cam IP66 with 32GB TF Card for Wildlife Monitoring"
+
 Used some of the info of the previous dude's article around hacking his BLE trail cam:
 https://geekitguide.com/wifi-ble-trailcam-investigation-part-1/
 
