@@ -12,11 +12,13 @@ WAKE_PAYLOAD = bytes.fromhex(
 )
 
 def nmcli_rescan():
-    subprocess.run(["nmcli", "dev", "wifi", "rescan"], check=False)
+    """Updated sudoers (sudo visudo) to allow this command"""
+    subprocess.run(["sudo", "nmcli", "dev", "wifi", "rescan"], check=False)
 
 def nmcli_list_ssids():
+    """Updated sudoers (sudo visudo) to allow this command"""
     p = subprocess.run(
-        ["nmcli", "-t", "-f", "SSID", "dev", "wifi", "list"],
+        ["sudo", "nmcli", "-t", "-f", "SSID", "dev", "wifi", "list"],
         text=True,
         capture_output=True,
     )
