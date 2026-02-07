@@ -28,57 +28,63 @@ def nmcli_list_ssids():
 async def main():
     creds = {"ssid": None, "pwd": None}
 
-    async with BleakClient(ADDRESS) as client:
-        print("BLE connected:", client.is_connected)
+    try:
+        async with BleakClient(ADDRESS) as client:
+            print("BLE connected:", client.is_connected)
 
-        buf = bytearray()
+            buf = bytearray()
 
-        def on_notify(_, data: bytearray):
-            nonlocal buf
-            print("NOTIFY:", data.hex())
-            buf.extend(data)
+            def on_notify(_, data: bytearray):
+                nonlocal buf
+                print("NOTIFY:", data.hex())
+                buf.extend(data)
 
-            # Try to find JSON in the buffer
+                # Try to find JSON in the buffer
+                try:
+                    s = buf.decode("ascii", errors="ignore")
+                    start = s.find("{")
+                    end = s.rfind("}")
+                    if start != -1 and end != -1 and end > start:
+                        js = s[start:end+1]
+                        obj = json.loads(js)
+                        if "ssid" in obj and "pwd" in obj:
+                            creds["ssid"] = obj["ssid"]
+                            creds["pwd"] = obj["pwd"]
+                except Exception:
+                    pass
+
+            await client.start_notify(CHAR_NOTIFY, on_notify)
+
+            print("Sending wake payload...")
+            await client.write_gatt_char(CHAR_WRITE, WAKE_PAYLOAD, response=True)
+
+            # Wait for creds from notify
+            for _ in range(50):  # up to ~10s
+                if creds["ssid"] and creds["pwd"]:
+                    break
+                await asyncio.sleep(0.2)
+
+            if creds["ssid"]:
+                print(f"✅ Camera reported SSID={creds['ssid']} PWD={creds['pwd']}")
+            else:
+                print("⚠️ Did not parse SSID/PWD from notify (but may still work)")
+
             try:
-                s = buf.decode("ascii", errors="ignore")
-                start = s.find("{")
-                end = s.rfind("}")
-                if start != -1 and end != -1 and end > start:
-                    js = s[start:end+1]
-                    obj = json.loads(js)
-                    if "ssid" in obj and "pwd" in obj:
-                        creds["ssid"] = obj["ssid"]
-                        creds["pwd"] = obj["pwd"]
-            except Exception:
-                pass
+                await client.stop_notify(CHAR_NOTIFY)
+            except Exception as e:
+                print(f"IGNORING error from client.stop_notify: {e}")
+    except EOFError as e:
+        print(f"ℹ️ BLE disconnected or error occurred (likely device switching to WiFi): {e}")
 
-        await client.start_notify(CHAR_NOTIFY, on_notify)
-
-        print("Sending wake payload...")
-        await client.write_gatt_char(CHAR_WRITE, WAKE_PAYLOAD, response=True)
-
-        # Wait for creds from notify
-        for _ in range(50):  # up to ~10s
-            if creds["ssid"] and creds["pwd"]:
-                break
-            await asyncio.sleep(0.2)
-
-        if creds["ssid"]:
-            print(f"✅ Camera reported SSID={creds['ssid']} PWD={creds['pwd']}")
-        else:
-            print("⚠️ Did not parse SSID/PWD from notify (but may still work)")
-
-        print("Waiting for SSID to appear in scans...")
-        for t in range(1, 61):  # up to 60s
-            nmcli_rescan()
-            ssids = nmcli_list_ssids()
-            if creds["ssid"] and creds["ssid"] in ssids:
-                print(f"✅ SSID is visible after {t}s")
-                break
-            await asyncio.sleep(1)
-        else:
-            print("❌ SSID still not visible after 60s")
-
-        await client.stop_notify(CHAR_NOTIFY)
+    print("Waiting for SSID to appear in scans...")
+    for t in range(1, 61):  # up to 60s
+        nmcli_rescan()
+        ssids = nmcli_list_ssids()
+        if creds["ssid"] and creds["ssid"] in ssids:
+            print(f"✅ SSID is visible after {t}s")
+            break
+        await asyncio.sleep(1)
+    else:
+        print("❌ SSID still not visible after 60s")
 
 asyncio.run(main())
