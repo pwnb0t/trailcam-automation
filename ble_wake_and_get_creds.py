@@ -32,7 +32,10 @@ def nmcli_connect(ssid: str, pwd: str, ifname: str = WIFI_IFNAME) -> bool:
     Connect using NM. This may require sudo/polkit depending on your system.
     """
     # Disconnect any existing connection on that interface (helps avoid “already active” weirdness)
-    subprocess.run(["sudo", "nmcli", "dev", "disconnect", ifname], check=False)
+    subprocess.run(["sudo", "nmcli", "dev", "disconnect", ifname], capture_output=True, check=False)
+
+    # Delete existing connection profile for this SSID if it exists to avoid conflicts
+    subprocess.run(["sudo", "nmcli", "connection", "delete", ssid], capture_output=True, check=False)
 
     p = subprocess.run(
         ["sudo", "nmcli", "dev", "wifi", "connect", ssid, "password", pwd, "ifname", ifname],
