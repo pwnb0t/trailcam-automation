@@ -11,19 +11,54 @@ WAKE_PAYLOAD = bytes.fromhex(
     "13 57 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
 )
 
+WIFI_IFNAME = "wlan0"
+
+
 def nmcli_rescan():
-    """Updated sudoers (sudo visudo) to allow this command"""
     subprocess.run(["sudo", "nmcli", "dev", "wifi", "rescan"], check=False)
 
+
 def nmcli_list_ssids():
-    """Updated sudoers (sudo visudo) to allow this command"""
     p = subprocess.run(
         ["sudo", "nmcli", "-t", "-f", "SSID", "dev", "wifi", "list"],
         text=True,
         capture_output=True,
     )
-    ssids = [l.strip() for l in p.stdout.splitlines() if l.strip()]
-    return ssids
+    return [l.strip() for l in p.stdout.splitlines() if l.strip()]
+
+
+def nmcli_connect(ssid: str, pwd: str, ifname: str = WIFI_IFNAME) -> bool:
+    """
+    Connect using NM. This may require sudo/polkit depending on your system.
+    """
+    # Disconnect any existing connection on that interface (helps avoid “already active” weirdness)
+    subprocess.run(["sudo", "nmcli", "dev", "disconnect", ifname], check=False)
+
+    p = subprocess.run(
+        ["sudo", "nmcli", "dev", "wifi", "connect", ssid, "password", pwd, "ifname", ifname],
+        text=True,
+        capture_output=True,
+    )
+    if p.returncode != 0:
+        print("❌ nmcli connect failed:")
+        if p.stdout:
+            print(p.stdout.strip())
+        if p.stderr:
+            print(p.stderr.strip())
+        return False
+
+    print("✅ nmcli connect succeeded")
+    return True
+
+
+def wifi_has_camera_ip(ifname: str = WIFI_IFNAME) -> bool:
+    """
+    Return True if ifname has a 192.168.43.x address.
+    """
+    p = subprocess.run(["ip", "-br", "addr", "show", ifname], text=True, capture_output=True)
+    out = p.stdout.strip()
+    return "192.168.43." in out
+
 
 async def main():
     creds = {"ssid": None, "pwd": None}
@@ -39,14 +74,12 @@ async def main():
                 print("NOTIFY:", data.hex())
                 buf.extend(data)
 
-                # Try to find JSON in the buffer
                 try:
                     s = buf.decode("ascii", errors="ignore")
                     start = s.find("{")
                     end = s.rfind("}")
                     if start != -1 and end != -1 and end > start:
-                        js = s[start:end+1]
-                        obj = json.loads(js)
+                        obj = json.loads(s[start:end+1])
                         if "ssid" in obj and "pwd" in obj:
                             creds["ssid"] = obj["ssid"]
                             creds["pwd"] = obj["pwd"]
@@ -58,33 +91,54 @@ async def main():
             print("Sending wake payload...")
             await client.write_gatt_char(CHAR_WRITE, WAKE_PAYLOAD, response=True)
 
-            # Wait for creds from notify
             for _ in range(50):  # up to ~10s
                 if creds["ssid"] and creds["pwd"]:
                     break
                 await asyncio.sleep(0.2)
 
-            if creds["ssid"]:
+            if creds["ssid"] and creds["pwd"]:
                 print(f"✅ Camera reported SSID={creds['ssid']} PWD={creds['pwd']}")
             else:
-                print("⚠️ Did not parse SSID/PWD from notify (but may still work)")
+                print("❌ Did not parse SSID/PWD from notify; cannot auto-connect.")
+                return
 
             try:
                 await client.stop_notify(CHAR_NOTIFY)
             except Exception as e:
                 print(f"IGNORING error from client.stop_notify: {e}")
+
     except EOFError as e:
         print(f"ℹ️ BLE disconnected or error occurred (likely device switching to WiFi): {e}")
 
     print("Waiting for SSID to appear in scans...")
-    for t in range(1, 61):  # up to 60s
+    for t in range(1, 61):
         nmcli_rescan()
         ssids = nmcli_list_ssids()
-        if creds["ssid"] and creds["ssid"] in ssids:
+        if creds["ssid"] in ssids:
             print(f"✅ SSID is visible after {t}s")
             break
         await asyncio.sleep(1)
     else:
         print("❌ SSID still not visible after 60s")
+        return
+
+    print("Connecting to camera Wi-Fi...")
+    if not nmcli_connect(creds["ssid"], creds["pwd"], WIFI_IFNAME):
+        return
+
+    # Wait for DHCP / address assignment
+    for _ in range(30):  # up to ~6s
+        if wifi_has_camera_ip(WIFI_IFNAME):
+            break
+        await asyncio.sleep(0.2)
+
+    if not wifi_has_camera_ip(WIFI_IFNAME):
+        print("❌ Connected but did not get 192.168.43.x address on wlan0.")
+        subprocess.run(["ip", "-br", "addr", "show", WIFI_IFNAME])
+        return
+
+    subprocess.run(["ip", "-br", "addr", "show", WIFI_IFNAME])
+    print("✅ Ready for UDP gallery refresh step (run your refresh script now).")
+
 
 asyncio.run(main())
