@@ -79,11 +79,14 @@ async def main():
                     start = s.find("{")
                     end = s.rfind("}")
                     if start != -1 and end != -1 and end > start:
-                        obj = json.loads(s[start:end+1])
+                        payload = s[start:end+1]
+                        print(f"DEBUG: attempting to parse: {payload}")
+                        obj = json.loads(payload)
                         if "ssid" in obj and "pwd" in obj:
                             creds["ssid"] = obj["ssid"]
                             creds["pwd"] = obj["pwd"]
-                except Exception:
+                except Exception as e:
+                    print(f"DEBUG: parsing error: {e}")
                     pass
 
             await client.start_notify(CHAR_NOTIFY, on_notify)
@@ -100,6 +103,8 @@ async def main():
                 print(f"✅ Camera reported SSID={creds['ssid']} PWD={creds['pwd']}")
             else:
                 print("❌ Did not parse SSID/PWD from notify; cannot auto-connect.")
+                print(f"DEBUG: final buffer content (hex): {buf.hex()}")
+                print(f"DEBUG: final buffer content (ascii): {buf.decode('ascii', errors='ignore')}")
                 return
 
             try:
