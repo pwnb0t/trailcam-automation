@@ -303,7 +303,7 @@ class TrailCamClient:
         self._keepalive_thread = threading.Thread(target=loop, daemon=True)
         self._keepalive_thread.start()
 
-    def send_cmd_json(self, obj: Dict, art_ver: int = 2, art_typ: int = 0x21):
+    def send_cmd_json(self, obj: Dict, art_ver: int = 2, art_typ: int = 1):
         payload_b64 = encrypt_cmd_json(obj)
         art = build_artemis_record(payload_b64, art_ver, art_typ)
         seq = self._seq8 & 0xFF
@@ -464,7 +464,7 @@ def login_and_get_token(
         "supportHeartBeat": True,
     }
     for _ in range(retries):
-        client.send_cmd_json(login_obj)
+        client.send_cmd_json(login_obj, art_ver=2, art_typ=1)
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             got = client.recv()
@@ -480,6 +480,36 @@ def login_and_get_token(
     return None
 
 
+def send_full_json_flow(
+    client: TrailCamClient,
+    token: int,
+    page: int = 0,
+    per_page: int = 45,
+    listen_s: float = 3.0,
+):
+    # cmdId 512 (dev info)
+    dev_info = {"cmdId": 512, "token": token}
+    client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
+    time.sleep(0.05)
+
+    # cmdId 768 (media list)
+    media_list = {"cmdId": 768, "itemCntPerPage": per_page, "pageNo": page, "token": token}
+    client.send_cmd_json(media_list, art_ver=2, art_typ=4)
+
+    # listen for any decrypted JSON responses
+    end = time.time() + listen_s
+    while time.time() < end:
+        got = client.recv()
+        if not got:
+            continue
+        addr, data = got
+        if addr[0] != CAMERA_IP:
+            continue
+        objs = client.handle_incoming_payload(data)
+        for obj in objs:
+            print("RX JSON:", obj)
+
+
 async def main():
     parser = argparse.ArgumentParser(description="TrailCam minimal client (wake/connect/refresh gallery)")
     parser.add_argument("--ble-address", default=DEFAULT_BLE_ADDRESS)
@@ -493,6 +523,8 @@ async def main():
     parser.add_argument("--login-user", default="admin")
     parser.add_argument("--login-pass", default="admin")
     parser.add_argument("--login-only", action="store_true", help="perform JSON login and exit")
+    parser.add_argument("--json-flow", action="store_true", help="send dev info + media list JSON flow")
+    parser.add_argument("--skip-legacy", action="store_true", help="skip legacy D0 packet sequence")
     args = parser.parse_args()
 
     ssid = args.ssid
@@ -563,6 +595,8 @@ async def main():
             print(f"Login token: {token}")
             if args.login_only:
                 return
+            if args.json_flow:
+                send_full_json_flow(client, token)
 
         # prelude: wait for handshake/status and echo 0x41/0x42
         seen_ops = {}
@@ -630,6 +664,9 @@ async def main():
                         seq16 = (body[2] << 8) | body[3]
                         large_chunks.setdefault(seq16, body[4:])
                         client.send_f1(0xD1, make_ack_body_seq16(list(large_chunks.keys())))
+
+        if args.skip_legacy:
+            return
 
         # send connect-phase D0 packets with timing similar to capture
         print("Sending connect-phase D0 packets...")
