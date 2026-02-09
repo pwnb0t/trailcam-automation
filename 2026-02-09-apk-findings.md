@@ -406,3 +406,71 @@ Example (from `pcap/trailcam_7-1-connect.pcap`):
 - The login response includes the command token, which the app injects into all subsequent command JSON.
 
 Next step is to run the extractor across other `pcap/trailcam_*-1-connect.pcap` files and compare tokens and sequences, then turn this into a reusable offline decoder and eventually a live client.
+
+## ARTEMIS v2 Key (32 bytes) — New Name: `artemis_key32`
+
+To disambiguate from the **login command token** (32-bit integer), we will call the 32-byte binary value:
+
+**`artemis_key32`** — the 32-byte payload carried in ARTEMIS ver=2 type=2/type=3 records during session establishment.
+
+### How it appears on the wire
+
+In the D0/ARTEMIS handshake packets, we see:
+
+- **ARTEMIS ver=2, type=2**: payload is base64 (44 bytes) that decodes to 32 raw bytes.
+- **ARTEMIS ver=2, type=3**: payload repeats the same 32-byte raw value as type=2 (likely an ACK/echo).
+
+Example (run 7, decoded raw 32 bytes):
+
+```
+cbe0c36ea30d3675792c38eedf194485e3956c8024ff6222b36baa07d4ce6aa5
+```
+
+Example (run 6, decoded raw 32 bytes):
+
+```
+cbe0c36ea30d3675792c38eedf194485e6d5a83101163f9a4c94590eda5411a8
+```
+
+### Observations
+
+- **Changes per session** (different between runs 6 and 7).
+- **Not present in BLE logs** (not found in `btsnoop/trailcam_7-1-connect-btsnoop_hci.log`).
+- **Not the same** as the login command token (integer in JSON).
+- Appears **before** or during the D0 handshake phase.
+
+### Related ARTEMIS records in the same phase
+
+- **ARTEMIS ver=2, type=1**: payload decodes to **128 bytes** (opaque).
+- **ARTEMIS ver=2, type=4**: payload decodes to **64 bytes** (opaque).
+
+These likely participate in the same key/handshake exchange as `artemis_key32`, but their exact structure is still unknown.
+
+### Implication
+
+`artemis_key32` appears to be a **session-level cryptographic or auth blob** used in the transport handshake (not the command JSON layer). We likely need to reproduce this handshake to be fully app-independent.
+
+## ARTEMIS v2 Record Structure (from PCAP)
+
+We extracted ARTEMIS ver=2 records from D0 packets and decoded the base64 payloads.
+
+Observed types and payload sizes:
+
+- ver=2, type=1: base64 -> **128 bytes** raw
+- ver=2, type=2: base64 -> **32 bytes** raw (`artemis_key32`)
+- ver=2, type=3: base64 -> **32 bytes** raw (matches type=2, likely echo/ACK)
+- ver=2, type=4: base64 -> **64 bytes** raw
+
+The 32-byte `artemis_key32` does **not** appear as a substring inside the type=1 or type=4 raw payloads (checked on run 7).
+
+## Native: ARTEMIS Receive Threads (PPCS channels)
+
+Ghidra shows multiple receive threads that all scan for a 7-byte frame header and pass frames to `FUN_000320b0` (the parser):
+
+- `FUN_00030788` reads PPCS channel **1**
+- `FUN_0003147c` reads PPCS channel **2**
+- `FUN_00031700` reads PPCS channel **3**
+- `FUN_00031998` reads PPCS channel **4**
+- `FUN_000309d4` reads PPCS channel **6**
+
+Each thread searches for the same 7-byte marker, validates `len + 0x14`, then calls `FUN_000320b0` to parse the frame. This indicates the ARTEMIS/EVC framing is shared across multiple PPCS channels.
