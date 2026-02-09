@@ -12,11 +12,17 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 from bleak import BleakClient
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 CAMERA_IP = "192.168.43.1"
 LOCAL_PORT = 16734
 DISCOVERY_PORT = 32108
 WIFI_IFNAME = "wlan0"
+
+# AES command channel (from libArLink.so)
+AES_CMD_KEY = b"xs38nul7cqf7m1va"
+AES_CMD_IV = b"\x00" * 16
 
 # BLE defaults (from prior reverse-engineering)
 DEFAULT_BLE_ADDRESS = "C6:1E:0D:E0:0C:FB"
@@ -238,6 +244,8 @@ class TrailCamClient:
         self.camera_addr: Optional[Tuple[str, int]] = None
         self._stop = threading.Event()
         self._keepalive_thread: Optional[threading.Thread] = None
+        self._seq8 = 0
+        self.token_int: Optional[int] = None
 
     def close(self):
         self._stop.set()
@@ -294,6 +302,23 @@ class TrailCamClient:
 
         self._keepalive_thread = threading.Thread(target=loop, daemon=True)
         self._keepalive_thread.start()
+
+    def send_cmd_json(self, obj: Dict, art_ver: int = 2, art_typ: int = 0x21):
+        payload_b64 = encrypt_cmd_json(obj)
+        art = build_artemis_record(payload_b64, art_ver, art_typ)
+        seq = self._seq8 & 0xFF
+        self._seq8 = (self._seq8 + 1) & 0xFF
+        body = bytes([0xD1, 0x00, 0x00, seq]) + art
+        self.send_f1(0xD0, body)
+
+    def handle_incoming_payload(self, data: bytes) -> List[Dict]:
+        parsed = unpack_f1(data)
+        if not parsed:
+            return []
+        opcode, body, _ = parsed
+        if opcode != 0xD0:
+            return []
+        return decrypt_artemis_json(body)
 
 
 # ---- Protocol helpers ----
@@ -366,6 +391,95 @@ def extract_gallery_records(assembled: bytes, out_dir: Optional[str] = None):
     return records
 
 
+def _pad16(b: bytes) -> bytes:
+    pad = (-len(b)) % 16
+    if pad:
+        b += b"\x00" * pad
+    return b
+
+
+def encrypt_cmd_json(obj: Dict) -> bytes:
+    js = json.dumps(obj, separators=(",", ":")).encode("utf-8")
+    pt = _pad16(js)
+    cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
+    enc = cipher.encryptor()
+    ct = enc.update(pt) + enc.finalize()
+    return base64.b64encode(ct)
+
+
+def decrypt_cmd_b64(b64: bytes) -> Optional[Dict]:
+    try:
+        ct = base64.b64decode(b64)
+    except Exception:
+        return None
+    if len(ct) % 16 != 0:
+        return None
+    cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
+    dec = cipher.decryptor()
+    pt = dec.update(ct) + dec.finalize()
+    pt = pt.rstrip(b"\x00")
+    if not pt.startswith(b"{"):
+        return None
+    try:
+        return json.loads(pt.decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+
+
+def build_artemis_record(payload_b64: bytes, ver: int, typ: int) -> bytes:
+    header = b"ARTEMIS\x00"
+    header += struct.pack("<I", ver)
+    header += struct.pack("<I", typ)
+    header += struct.pack("<I", len(payload_b64))
+    return header + payload_b64
+
+
+def decrypt_artemis_json(body: bytes) -> List[Dict]:
+    out: List[Dict] = []
+    # D0 body may begin with D1 header
+    if len(body) >= 4 and body[0] == 0xD1:
+        body = body[4:]
+    records = parse_artemis_records(body)
+    for _ver, _typ, payload in records:
+        obj = decrypt_cmd_b64(payload)
+        if obj:
+            out.append(obj)
+    return out
+
+
+def login_and_get_token(
+    client: TrailCamClient,
+    username: str,
+    password: str,
+    timeout_s: float = 5.0,
+    retries: int = 3,
+) -> Optional[int]:
+    login_obj = {
+        "cmdId": 0,
+        "usrName": username,
+        "password": password,
+        "needVideo": 0,
+        "needAudio": 0,
+        "utcTime": int(time.time()),
+        "supportHeartBeat": True,
+    }
+    for _ in range(retries):
+        client.send_cmd_json(login_obj)
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            got = client.recv()
+            if not got:
+                continue
+            addr, data = got
+            if addr[0] != CAMERA_IP:
+                continue
+            objs = client.handle_incoming_payload(data)
+            for obj in objs:
+                if obj.get("cmdId") == 0 and "token" in obj:
+                    return int(obj["token"])
+    return None
+
+
 async def main():
     parser = argparse.ArgumentParser(description="TrailCam minimal client (wake/connect/refresh gallery)")
     parser.add_argument("--ble-address", default=DEFAULT_BLE_ADDRESS)
@@ -376,6 +490,9 @@ async def main():
     parser.add_argument("--port", type=int, default=LOCAL_PORT)
     parser.add_argument("--thumbs", action="store_true", help="write thumbnails to out/thumbnails")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--login-user", default="admin")
+    parser.add_argument("--login-pass", default="admin")
+    parser.add_argument("--login-only", action="store_true", help="perform JSON login and exit")
     args = parser.parse_args()
 
     ssid = args.ssid
@@ -437,6 +554,15 @@ async def main():
 
         # start keepalive loop
         client.start_keepalive(interval_s=1.0)
+
+        token = login_and_get_token(client, args.login_user, args.login_pass)
+        if token is None:
+            print("Login token not found yet.")
+        else:
+            client.token_int = token
+            print(f"Login token: {token}")
+            if args.login_only:
+                return
 
         # prelude: wait for handshake/status and echo 0x41/0x42
         seen_ops = {}
