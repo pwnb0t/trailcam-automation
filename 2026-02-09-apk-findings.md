@@ -118,3 +118,145 @@ This strongly suggests:
 - The 32-byte token seen in PCAPs is likely derived inside the native login/handshake (not BLE).
 
 Next step should be to correlate the native login flow with the PCAP connect handshake and see where the token is computed or transmitted.
+
+## libArLink.so Analysis (native)
+
+File: `apk/apk_unzip_v2_armeabi/lib/armeabi-v7a/libArLink.so`
+
+### High-level observations
+
+- ELF 32-bit ARM shared object, stripped (no symbols).
+- Contains AES and CRC routines, plus PPPP/P2P-style function names.
+- Contains log strings indicating **login**, **command send**, **cmdId parsing**, **thumbnail recv**, **file download**, and **token**.
+
+### Notable strings found
+
+These indicate the native login/transport layer and likely the source of the 32-byte session token:
+
+- `EC_Login, uid:%s, usrName:%s, password:%s, handle:%d`
+- `sendCommand:%s, seq:%d`
+- `get cmdId fail`
+- `cmdId`
+- `Parse cmd, lwlaes_decrypt fail`
+- `sendCommand lwlaes_encrypt fail`
+- `token`
+- `ARTEMIS`
+
+Transport / P2P indicators (PPP/PPPP style):
+
+- `PPCS_LoginStatus_Check`
+- `cs2p2p_PPPP_Proto_Send_DevLgn...`
+- `cs2p2p_PPPP_Proto_Send_DevLgnAck...`
+- `cs2p2p_PPPP_Proto_Send_SDevLgn...`
+- `cs2p2p_PPPP_thread_recv_Proto...`
+- `Start p2p connect to:%s, connectType:%d, bEnableLanSearch:%8x`
+
+Crypto indicators:
+
+- `AES_set_encrypt_key`, `AES_cbc_encrypt`, `AES_encrypt`
+- `_NDT_AES128_Encrypt`, `_NDT_AES128_Decrypt`
+- `_NDT_gAES128Key`, `_NDT_gAES128KeyArray`
+
+### Implications
+
+- The **token is not in Java**. The presence of `token` in the native library plus the AES routines strongly suggests that the 32-byte token and/or handshake derivation is computed inside `libArLink.so` during `ArLinkApi.logIn(...)`.
+- The JSON commands (`cmdId`, media list, thumbnails) are created in Java and passed to native; the native layer encrypts/encapsulates them (see `lwlaes_encrypt`/`lwlaes_decrypt` logs).
+- The P2P stack appears to be PPPP/CS2P2P with LAN/Relay/P2P modes and CRC validation; login uses `DevLgn`/`SDevLgn` protocol messages.
+
+### What we can’t see yet
+
+- The exact token derivation or handshake payload layout, because the library is stripped and we don’t have a disassembler/decompiler (binutils/ghidra/r2).
+
+### Next steps for deeper analysis
+
+If you want to go deeper, the best options are:
+
+1. **Use Ghidra** on `libArLink.so` to locate `EC_Login` and trace token generation.
+2. Install **binutils** (for `readelf`, `objdump`, `nm`) and attempt a basic control-flow trace.
+3. Dynamic tracing (on Android, with Frida) of `ArLinkApi.logIn(...)` and surrounding native calls.
+
+Even without those, we now know:
+
+- The token is almost certainly **native-generated** during login.
+- The command protocol is JSON with `cmdId` (Java-side) and is encrypted/packed in native code.
+
+## Native: sendCommand Injects Token Into JSON
+
+By decompiling `Java_com_xlink_arlink_ArLinkApi_sendCommand` and its helper (`fcn.00022f58`), we found the command flow:
+
+1. `sendCommand(...)` allocates a buffer for the JSON string from Java.
+2. It calls `fcn.00022f58` which:
+   - Logs: `EC_SendCommand enter, handle:%d, command:%s, seq:%d`
+   - Looks up the active session object
+   - **Reads a per-session token**
+   - Builds a new JSON string containing the original command plus a `"token"` field
+   - Logs: `pCmdWithTokenStr:%s`
+   - Calls `fcn.00021130` to actually send the command
+
+### Token usage (from decompile)
+
+Inside `fcn.00022f58` we see:
+
+- It calls `0x21de4` which reads a pointer at `[session + 0x18c]` (likely the token string).
+- It then calls `fcn.0001e65c` with `"token"` to inject the token into the JSON object.
+- It uses `fcn.0001de00` / `fcn.0001ec70` to build and escape the final JSON string (`pCmdWithTokenStr`).
+
+This means **the token is required for all commands**; it is not part of the Java command JSON and is injected natively just before sending.
+
+### Implications
+
+- Our script must obtain this token (or replicate its derivation) before we can send `cmdId` commands successfully.
+- The token appears to be stored on a session object created during login; it is probably returned by the camera during the connect/login exchange.
+
+## Ghidra: Token Storage and Injection
+
+Using Ghidra headless, we decompiled the functions that reference `"token"` and command send:
+
+### `FUN_00032f58` — Send command (injects token)
+
+This function is called by the JNI `sendCommand(...)` path and:
+
+- Looks up the session by handle (`FUN_00032f34`).
+- Retrieves a token via `FUN_00031de4(session->0x0c)`.
+- Injects it into the outgoing JSON using `FUN_0002e65c(..., "token", token)` (inferred from string/xref).
+- Builds the final JSON string (`FUN_0002de00` + `FUN_0002ec70`).
+- Sends it via `FUN_00031130(...)`.
+
+### `FUN_00032020` — Parse login response and store token
+
+This function parses a JSON response and writes:
+
+```
+*(session + 0x18c) = <token_string_pointer>
+```
+
+It uses JSON helpers (`FUN_0002ddf8`, `FUN_0002e382`) and specifically extracts the `"token"` key, storing it in the session structure at offset `0x18c`.
+
+This is the missing link: **the token is parsed from a login response and stored**, then later injected into every command.
+
+### `FUN_00032a1c` — Login handler
+
+This appears to initialize a session object and trigger the login flow. It logs:
+
+```
+EC_Login, uid:%s, usrName:%s, password:%s, handle:%d
+```
+
+### `FUN_00032c04` — Login result callback
+
+This logs:
+
+```
+EC_OnLoginResult, handle:%d, errorCode:%d, seq:%d
+```
+
+and dispatches callbacks based on login result codes.
+
+## Practical Impact
+
+To replicate the app’s behavior:
+
+1. We must perform the login/handshake sequence that returns a JSON containing `"token"`.
+2. We must store and inject that token into all subsequent JSON commands before sending.
+
+Without the token, the camera will ignore or reject `cmdId` commands.
