@@ -387,7 +387,7 @@ Example (from `pcap/trailcam_7-1-connect.pcap`):
 {"cmdId":0,"result":0,"token":78205281,"bat_percent":100,"errorMsg":"Success"}
 ```
 
-**Important:** The token is an integer (e.g. `78205281`) in the decrypted JSON, not a 32-byte string. The 32-byte value we saw in other captures is likely a separate transport/session value, but the JSON command token used here is a 32-bit integer.
+**Important:** The token is an integer (e.g. `78205281`) in the decrypted JSON. The 32-byte values seen in D0/ARTEMIS packets are **AES-encrypted command blobs**, not a separate token.
 
 ### Subsequent commands (phone -> camera)
 
@@ -407,48 +407,51 @@ Example (from `pcap/trailcam_7-1-connect.pcap`):
 
 Next step is to run the extractor across other `pcap/trailcam_*-1-connect.pcap` files and compare tokens and sequences, then turn this into a reusable offline decoder and eventually a live client.
 
-## ARTEMIS v2 Key (32 bytes) — New Name: `artemis_key32`
+## ARTEMIS v2 Ciphertext Blobs — Name: `artemis_cmd_cipher32`
 
-To disambiguate from the **login command token** (32-bit integer), we will call the 32-byte binary value:
+To disambiguate from the **login command token** (32-bit integer), we call the 32-byte payload:
 
-**`artemis_key32`** — the 32-byte payload carried in ARTEMIS ver=2 type=2/type=3 records during session establishment.
+**`artemis_cmd_cipher32`** — the 32-byte AES-CBC ciphertext carried in ARTEMIS ver=2 type=2/type=3 records.
 
 ### How it appears on the wire
 
-In the D0/ARTEMIS handshake packets, we see:
+In the D0/ARTEMIS packets, we see:
 
 - **ARTEMIS ver=2, type=2**: payload is base64 (44 bytes) that decodes to 32 raw bytes.
-- **ARTEMIS ver=2, type=3**: payload repeats the same 32-byte raw value as type=2 (likely an ACK/echo).
+- **ARTEMIS ver=2, type=3**: payload repeats the same 32-byte ciphertext as type=2 (likely an ACK/echo).
 
-Example (run 7, decoded raw 32 bytes):
+Example (run 7, decoded ciphertext):
 
 ```
 cbe0c36ea30d3675792c38eedf194485e3956c8024ff6222b36baa07d4ce6aa5
 ```
 
-Example (run 6, decoded raw 32 bytes):
+Example (run 6, decoded ciphertext):
 
 ```
 cbe0c36ea30d3675792c38eedf194485e6d5a83101163f9a4c94590eda5411a8
 ```
 
-### Observations
+### Observations and meaning
 
 - **Changes per session** (different between runs 6 and 7).
 - **Not present in BLE logs** (not found in `btsnoop/trailcam_7-1-connect-btsnoop_hci.log`).
 - **Not the same** as the login command token (integer in JSON).
-- Appears **before** or during the D0 handshake phase.
+- It is **AES-CBC ciphertext** that decrypts to JSON command data:
+  - type=1 → login JSON (`cmdId=0`)
+  - type=2/3 → dev info JSON (`cmdId=512`, includes token)
+  - type=4 → media list JSON (`cmdId=768`, includes token)
 
 ### Related ARTEMIS records in the same phase
 
-- **ARTEMIS ver=2, type=1**: payload decodes to **128 bytes** (opaque).
-- **ARTEMIS ver=2, type=4**: payload decodes to **64 bytes** (opaque).
+- **ARTEMIS ver=2, type=1**: base64 → **128 bytes** ciphertext (decrypts to login JSON).
+- **ARTEMIS ver=2, type=4**: base64 → **64 bytes** ciphertext (decrypts to media list JSON).
 
-These likely participate in the same key/handshake exchange as `artemis_key32`, but their exact structure is still unknown.
+These are just different encrypted command payload sizes, not separate session keys.
 
 ### Implication
 
-`artemis_key32` appears to be a **session-level cryptographic or auth blob** used in the transport handshake (not the command JSON layer). We likely need to reproduce this handshake to be fully app-independent.
+`artemis_cmd_cipher32` is **not** a separate session key. It is the encrypted form of `{"cmdId":512,"token":...}`. This means the only actual token is the 32-bit login token, and the rest is standard AES-CBC encryption with the static key.
 
 ## ARTEMIS v2 Record Structure (from PCAP)
 
@@ -456,12 +459,12 @@ We extracted ARTEMIS ver=2 records from D0 packets and decoded the base64 payloa
 
 Observed types and payload sizes:
 
-- ver=2, type=1: base64 -> **128 bytes** raw
-- ver=2, type=2: base64 -> **32 bytes** raw (`artemis_key32`)
-- ver=2, type=3: base64 -> **32 bytes** raw (matches type=2, likely echo/ACK)
-- ver=2, type=4: base64 -> **64 bytes** raw
+- ver=2, type=1: base64 -> **128 bytes** ciphertext (decrypts to login JSON)
+- ver=2, type=2: base64 -> **32 bytes** ciphertext (`artemis_cmd_cipher32`)
+- ver=2, type=3: base64 -> **32 bytes** ciphertext (matches type=2, likely echo/ACK)
+- ver=2, type=4: base64 -> **64 bytes** ciphertext (decrypts to media list JSON)
 
-The 32-byte `artemis_key32` does **not** appear as a substring inside the type=1 or type=4 raw payloads (checked on run 7).
+The 32-byte `artemis_cmd_cipher32` does **not** appear as a substring inside the type=1 or type=4 ciphertext (checked on run 7).
 
 ## Native: ARTEMIS Receive Threads (PPCS channels)
 
