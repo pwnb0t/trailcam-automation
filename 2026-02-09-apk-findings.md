@@ -327,6 +327,48 @@ AES-128-CBC, key=xs38nul7cqf7m1va, IV=0x00..00, zero-padded, then base64
 
 Next step: locate the `EVC_...` frames inside the PPCS channel data in the PCAPs and apply the decrypt pipeline above.
 
+## Offline Decrypt Summary Across PCAPs - 2026-02-09
+
+We ran `tools/extract_cmd_frames.py --scan-base64` across all `pcap/trailcam_*-1-connect.pcap` files and extracted the login token + command sequence.
+
+Results:
+
+- `pcap/trailcam_2-1-connect.pcap`:
+  - token: `37817828`
+  - login: `admin / admin`
+  - cmdId sequence: `0, 772, 0, 512, 768, 525` (with many repeats)
+
+- `pcap/trailcam_4-1-connect.pcap`:
+  - token: `132887215`
+  - login: `admin / admin`
+  - cmdId sequence: `0, 772, 0, 512, 768, 525` (with repeats)
+
+- `pcap/trailcam_5-1-connect.pcap`:
+  - token: `19869874`
+  - login: `admin / admin`
+  - cmdId sequence: `0, 772, 0, 512, 768, 525` (with repeats)
+
+- `pcap/trailcam_6-1-connect.pcap`:
+  - token: `73869200`
+  - login: `admin / admin`
+  - cmdId sequence: `0, 772, 0, 512, 768, 525` (with repeats)
+
+- `pcap/trailcam_7-1-connect.pcap`:
+  - token: `78205281`
+  - login: `admin / admin`
+  - cmdId sequence: `0, 772, 0, 512, 768, 525` (with repeats)
+
+Notes:
+
+- The **token is a 32-bit integer** and changes each session.
+- All sessions use `admin / admin`.
+- The **minimum flow** for gallery listing appears to be:
+  - `cmdId=0` login
+  - `cmdId=512` dev info (optional but always present)
+  - `cmdId=768` media list
+  - `cmdId=525` heartbeat/status repeats
+- `cmdId=772` (thumbnails) appears early and may be part of the app’s initial refresh sequence.
+
 ## Offline Decrypt Results (PCAP) - 2026-02-09
 
 Using `tools/extract_cmd_frames.py --scan-base64`, we can recover encrypted JSON from the PPCS payloads even without locating `EVC_` headers. This confirms the AES details and shows the actual login + gallery requests.
