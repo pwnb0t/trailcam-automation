@@ -260,3 +260,107 @@ To replicate the app’s behavior:
 2. We must store and inject that token into all subsequent JSON commands before sending.
 
 Without the token, the camera will ignore or reject `cmdId` commands.
+
+## Command Encryption Details (native)
+
+We now have the actual AES details used by the native command channel (from Ghidra decompile + callsite analysis in `libArLink.so`).
+
+### AES key
+
+The AES key used for command encryption/decryption is a static 16-byte ASCII string stored in the binary:
+
+```
+xs38nul7cqf7m1va
+```
+
+This was found by analyzing the `FUN_00031130` callsite:
+
+- The call to `FUN_00034cf0(...)` loads a literal at `0x31460`, then `add r0, pc` to get the key pointer.
+- Resolving that PC-relative literal points to address `0x00026ada`, whose bytes are:
+
+```
+78 73 33 38 6e 75 6c 37 63 71 66 37 6d 31 76 61
+```
+
+Which is ASCII for `xs38nul7cqf7m1va`.
+
+### Encryption/Decryption functions
+
+The command payload uses AES-128-CBC with **zero IV** and **zero padding**.
+
+#### Encrypt + Base64 (`FUN_00034cf0`)
+
+- `AES_set_encrypt_key(key, 0x80, ...)`
+- `AES_cbc_encrypt(plaintext, out, len, key, iv=0, enc=1)`
+- `FUN_00034a94(...)` then base64-encodes the ciphertext into ASCII.
+
+Caller (`FUN_00031130`) pads the JSON plaintext up to a 16-byte boundary with zero bytes before calling this.
+
+#### Base64 Decode + Decrypt (`FUN_00034e08`)
+
+- `FUN_00034b74(...)` base64-decodes into a temporary buffer.
+- `AES_set_decrypt_key(key, 0x80, ...)`
+- `AES_cbc_encrypt(ciphertext, out, len, key, iv=0, enc=0)`
+
+The decrypted plaintext is zero-padded JSON.
+
+### Frame format (command payload)
+
+`FUN_00031130` builds an outgoing packet as:
+
+- 20-byte header (starts with the 7-byte string `EVC_...`)
+- `payload_len` (length of base64 string + NUL)
+- base64-encoded ciphertext (NUL-terminated)
+
+We still need to map the full header fields precisely (the function writes:
+`strncpy(..., <7-byte header>)`, sets `byte[8]=0x02`, zeros, then writes `param_3` at offset `0x0c` and `payload_len` at `0x10`).
+
+### Implications
+
+- The AES key is **static** and does **not** depend on the 32-byte token.
+- Token still must be inserted into JSON before encrypting.
+- If we can extract the raw command payload from PCAP (after PPCS), we should be able to decrypt it offline using:
+
+```
+AES-128-CBC, key=xs38nul7cqf7m1va, IV=0x00..00, zero-padded, then base64
+```
+
+Next step: locate the `EVC_...` frames inside the PPCS channel data in the PCAPs and apply the decrypt pipeline above.
+
+## Offline Decrypt Results (PCAP) - 2026-02-09
+
+Using `tools/extract_cmd_frames.py --scan-base64`, we can recover encrypted JSON from the PPCS payloads even without locating `EVC_` headers. This confirms the AES details and shows the actual login + gallery requests.
+
+Example (from `pcap/trailcam_7-1-connect.pcap`):
+
+### Login request (phone -> camera)
+
+```
+{"cmdId":0,"usrName":"admin","password":"admin","needVideo":0,"needAudio":0,"utcTime":1770582417,"supportHeartBeat":true}
+```
+
+### Login response (camera -> phone)
+
+```
+{"cmdId":0,"result":0,"token":78205281,"bat_percent":100,"errorMsg":"Success"}
+```
+
+**Important:** The token is an integer (e.g. `78205281`) in the decrypted JSON, not a 32-byte string. The 32-byte value we saw in other captures is likely a separate transport/session value, but the JSON command token used here is a 32-bit integer.
+
+### Subsequent commands (phone -> camera)
+
+- `{"cmdId":512,"token":78205281}` (repeated)
+- `{"cmdId":768,"itemCntPerPage":45,"pageNo":0,"token":78205281}` (gallery list)
+- `{"cmdId":525}` (repeated, likely heartbeat or status poll)
+
+### Command responses (camera -> phone)
+
+- `{"cmdRet":0,"result":0,"cmdId":772}` (thumbnail command ack)
+
+### Notes
+
+- We did **not** find `EVC_` headers directly, but scanning for base64-like substrings inside PPCS payloads reliably extracts encrypted JSON.
+- This validates that the AES key/IV are correct and usable for offline decoding.
+- The login response includes the command token, which the app injects into all subsequent command JSON.
+
+Next step is to run the extractor across other `pcap/trailcam_*-1-connect.pcap` files and compare tokens and sequences, then turn this into a reusable offline decoder and eventually a live client.
