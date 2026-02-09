@@ -141,6 +141,16 @@ CONNECT_D0_PACKETS = [
     ),
 ]
 
+REFRESH_D0_PACKETS = [
+    bytes.fromhex("f1d00031d100000e415254454d4953000200000008000100190000004d7a6c423336582f49566f385a7a49357247396a31773d3d00"),
+    bytes.fromhex("f1d00031d100000f415254454d4953000200000009000100190000004d7a6c423336582f49566f385a7a49357247396a31773d3d00"),
+    bytes.fromhex("f1d00071d1000010415254454d49530002000000260000005900000039305248304d6734504d6666594931664143796364504446764b52562f32327965695a6f44504b5246637947306a48376d6b5a43453136756378576347416f33687452413167624564337839743067493434454764413d3d00"),
+    bytes.fromhex("f1d00404d1000011415254454d4953000200000027000000590a0000794a7565306f4e58423357704c79645a774e305035432f2f3368586d6458356e5938364d4f41397349316c584565657751447958396a6539535a7971794c5a494a737a3151734347435a4a7846364e3657414a524d6c6b357361692f353949356131436f5642624f34796336393454334d6d6a466669592f536569413242686f6957332b45554870515262437045774d5a5974533739737a4d47674f516251504a3278442f414b555232643672642b6a33436a5158714457434974717073725736787366644d2f43636b7635655571314f55746b4479526951746d72702f7159474438432f476862385873703735626e3869674e4c3632714f314c637456597745757835772f4344496a666f6b5777654c766348664c553666305a3336386e32344b796e512b5164495a75533467484f374f592f6c6936497156526d617644716f624e594948594b6f586d364f795773354c4248366a4c57345a706258614c35622f2b583433345844557a306b654c4e324b467470574a572b58492b42677156684d4736374c683937714954546f7762793843306a6f58356a516b307531307556323743496d2b6c5275394a30536d6263434f7661436171727972324a594c593952755150786f4f624f51664c6651724d44316959544571455545714e4f4e65397575336c59596a637a2b5035654f717534716c67784f4e7572315639744562706f643255384d635a4565514b4e675066725a70756f31433978644e597a456b706d71394e33536f487a39735a434234584a5365674f657964322b5942626357695666762f42387059587042636a667148576930526465684746506f484e4f346d46426439335a4c3237645447483576574972344e56694630556471676265474b594a506b716d3941556a56526e2b59685264703134714e5652566c564b5046626a32726c336d333648356b316269424c696c7948326e6453495974516153657457774e4d54453850454b656e7a6b766354634768666b776d38324d6943596a776835424b6d42714670337a3336672f37554a325033332f382b6172514f54656554656130624d774d4b2b4c6e555863486f6e737a6d4451423759794b30474f65516951426365566e70614a492f44496b7935764c7573303859564175796b733042524a6949576673635467306f464139366c696d483158617254755639473278744e6d6b686a424a4e51464d492b4a53375450314d724d4f325033576e7430462b704459335949496c61335a57623873544d4a3765685158706e582b7632354f78445a737a6274393233634e5138525739567942726a746f654955446763484546724362697a7235375351446f587841614e774e3938534674414670537a3279424563364b464d375a6f4e"),
+    bytes.fromhex("f1d00404d10000126f6d566a497667453776594d57334b2f4f2f786d593131323937685937342b686c3551476c496a735a745871585071597347413067574438552f706a385a54476154566a79562b6b623873467a3430325832514d47734152773536337370316247466844696535376b6d4a6b70544a52526d2f5771354631414a35636c544c52326c4558314674645077742f525748412b777652436f5173595351614d34533356304634774e586e6f596c593745705a304a4d775a495966364b4233514a6c4343553663694b7a5832306c493571484d644e6e62736b455a612b33304a62557a70444c4531583032467154316c58624a663568386b4635327233384b5a4e53473065674d554f4b616534776c376467504f514e6d70437a364a37674765484f6a76516347363961497030514b597a432f306a6f79676f43636156487455533969676b67716b533646596f4259585032794b4c344b5978495678436b75416472584b4d496f684645306e4e7173694d73577933416e67764f584d706d344743633777675a59666b726a36356f75464a792b4b546d4746316b6b597a7674554a6f51546a7a4b7535596b304741734b57525830527742394c7464755134754d70795a4d5566676c4d6c75476f31425872657463796d5764616c756c7454416e4e69546c556231705776394f50664b374536706155796a4762683948547a775449395a4c664c5139495164414d79484d49695472726f3742346646447743696378673631794a5964506b413139673766575365796f473536387638734b4f58374f7a7949685a76597774457376726d67736f7662506d314a307a634d304c565079655578797049314b385861436b6d494677664d574f4a334469756a30565848724b6e433774785252624b5a584e504275414b676a5a507446365a6b6f39673933767154544d4164556549776e726d646549734e6631333578786a733633426d7068672f7878664b424c4c6f36534675772f5852645732413431324c4757303872484f74524831427955514e6568416e783779325759706533454a74625949426d7133414b2b6c452b3259392f49787262654d45554372496f784a4a52456872504f5a3639727272617746764d31444459617567564d313746596c2f45765568424d5950414558756c786a7361506c4f74484370694d64746c70766b2b7a6b424c6273626b497032476b596b676f63515a726174624e6935495378506b3850612b4362366b3066696b414a3377564c6f36566a71386749387247615479755a6e6a425544356d6e35667374666976562b77376f6b7a45667564766d467676716673556674743262457475527a725161596858467737785151517149676a464c4643646b5a362b327170426d554f464e32327355595a6e436b7a6176656858517a666941"),
+    bytes.fromhex("f1d00271d100001334636b6843524d644d336a6c7070365a62306f484144446946537a664751584a6d776b59524a6f556237522b39674b657a37464f6534643870304232542b4c67525a50536d73722b694c4931626a766b4d45446a44364b55726657447a742f3646427454736d776a3137506a70583831703364332b4856384476556648514e4668307a424f745371546a686b6c4538326364344c746b43654a4979345339787945676c486b522b563862494e69466b3969793953315077334d6b4d7761654b7635433248436b3030356f49676e6176384978557077383732346668656230516d6e757154443334464a354837344d6c38793073706748713857655533364f775334365931456f47613149377861786a64714a366b554d456d453941625674676566595a325634435a79367454705565322f3948416475795975304c5a4a38474447694337435a726f38445a6c76305358334e413136673834786c596d4a426551414e642b6643346f534a5a75457742345573376b6949415361563351664859755642505543504b342f746631323370354868745653554338577a67322f3653595665375a6931316a586c6b7679613074376f6a5669677967774b4448566d6273526d79723248673231546b6766536d614a53727a4c6464496d6e61502b506e6d4d6958555167394b69782b656f6f5138354e6c644b2f51394572564f7669436d4d79576c5848595638536565566d764638574f4f635342634d356f37687748497333365642306b66316a6165716359496532717656746a394d4574394d6736706a47594c68797a44694d487431464533676a4d646b5a534f723256543875525344454c564c46614a49673d3d00"),
+    bytes.fromhex("f1d00031d1000014415254454d495300020000000a000100190000004d7a6c423336582f49566f385a7a49357247396a31773d3d00"),
+    bytes.fromhex("f1d00031d1000015415254454d495300020000000b000100190000004d7a6c423336582f49566f385a7a49357247396a31773d3d00"),
+]
 
 def nmcli_rescan():
     subprocess.run(["sudo", "nmcli", "dev", "wifi", "rescan"], check=False)
@@ -245,6 +255,12 @@ class TrailCamClient:
     def send_f1(self, opcode: int, body: bytes = b""):
         payload = bytes([0xF1, opcode]) + struct.pack("!H", len(body)) + body
         self.send_raw(payload)
+
+    def send_beacons(self, count: int = 2):
+        for _ in range(count):
+            self.send_raw(bytes.fromhex("f1300000"), ("192.168.43.255", DISCOVERY_PORT))
+            self.send_raw(bytes.fromhex("f1300000"), ("255.255.255.255", DISCOVERY_PORT))
+            time.sleep(0.05)
 
     def recv(self) -> Optional[Tuple[Tuple[str, int], bytes]]:
         try:
@@ -359,6 +375,7 @@ async def main():
     parser.add_argument("--ifname", default=WIFI_IFNAME)
     parser.add_argument("--port", type=int, default=LOCAL_PORT)
     parser.add_argument("--thumbs", action="store_true", help="write thumbnails to out/thumbnails")
+    parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     ssid = args.ssid
@@ -399,22 +416,32 @@ async def main():
     print("Connected to camera AP. Starting UDP session...")
     client = TrailCamClient(local_port=args.port)
     try:
-        # send discovery beacons
-        for _ in range(4):
-            client.send_raw(bytes.fromhex("f1300000"), ("192.168.43.255", DISCOVERY_PORT))
-            client.send_raw(bytes.fromhex("f1300000"), ("255.255.255.255", DISCOVERY_PORT))
-            time.sleep(0.05)
+        # send initial discovery beacons
+        client.send_beacons(count=4)
 
         # learn camera port
         client.learn_camera_port()
         print(f"Camera addr: {client.camera_addr}")
+        # periodic beacons during prelude
+        def beacon_loop():
+            end = time.time() + 8.0
+            while time.time() < end:
+                try:
+                    client.send_beacons(count=1)
+                except Exception:
+                    pass
+                time.sleep(0.5)
+
+        t_beacon = threading.Thread(target=beacon_loop, daemon=True)
+        t_beacon.start()
 
         # start keepalive loop
         client.start_keepalive(interval_s=1.0)
 
-        # prelude: respond to 0x41 if seen
+        # prelude: wait for handshake/status and echo 0x41/0x42
+        seen_ops = {}
         start = time.time()
-        while time.time() - start < 1.5:
+        while time.time() - start < 3.0:
             got = client.recv()
             if not got:
                 continue
@@ -425,27 +452,100 @@ async def main():
             if not parsed:
                 continue
             opcode, body, _ = parsed
-            if opcode == 0x41:
-                # echo back twice
-                client.send_f1(0x41, body)
+            seen_ops[opcode] = seen_ops.get(opcode, 0) + 1
+            if args.debug:
+                print(f"RX opcode=0x{opcode:02x} len={len(body)}")
+            if opcode in (0x41, 0x42):
+                # echo back twice like app
+                client.send_f1(opcode, body)
                 time.sleep(0.02)
-                client.send_f1(0x41, body)
+                client.send_f1(opcode, body)
             elif opcode == 0xE0:
                 client.send_f1(0xE1, b"")
+            elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+                # ACK small seq8 chunks even during handshake
+                seq8 = body[3]
+                ack = make_ack_body_seq8([seq8])
+                client.send_f1(0xD1, ack)
 
-        # send connect-phase D0 packets
+        if args.debug:
+            print("Handshake opcodes seen:", {hex(k): v for k, v in seen_ops.items()})
+
+        large_chunks: Dict[int, bytes] = {}
+        small_chunks: Dict[int, bytes] = {}
+
+        def pump_incoming(duration_s: float):
+            end = time.time() + duration_s
+            while time.time() < end:
+                got = client.recv()
+                if not got:
+                    continue
+                addr, data = got
+                if addr[0] != CAMERA_IP:
+                    continue
+                parsed = unpack_f1(data)
+                if not parsed:
+                    continue
+                opcode, body, _ = parsed
+                if args.debug:
+                    print(f"RX opcode=0x{opcode:02x} len={len(body)}")
+                if opcode in (0x41, 0x42):
+                    client.send_f1(opcode, body)
+                elif opcode == 0xE0:
+                    client.send_f1(0xE1, b"")
+                elif opcode == 0xD0 and len(body) >= 4:
+                    if args.debug and len(body) >= 1000:
+                        print("D0 large head:", body[:8].hex())
+                    if body[0] == 0xD1 and body[1] == 0x00:
+                        seq8 = body[3]
+                        small_chunks.setdefault(seq8, body[4:])
+                        client.send_f1(0xD1, make_ack_body_seq8(list(small_chunks.keys())))
+                    elif body[0] == 0xD1 and body[1] == 0x04:
+                        seq16 = (body[2] << 8) | body[3]
+                        large_chunks.setdefault(seq16, body[4:])
+                        client.send_f1(0xD1, make_ack_body_seq16(list(large_chunks.keys())))
+
+        # send connect-phase D0 packets with timing similar to capture
         print("Sending connect-phase D0 packets...")
-        for pkt in CONNECT_D0_PACKETS:
-            client.send_raw(pkt)
-            time.sleep(0.02)
+        schedule = [
+            # (delay_after_s, pkt_index, repeat)
+            (0.0, 0, 1),
+            (0.0, 1, 3),
+            (0.0, 2, 3),
+            (0.0, 3, 3),
+            (2.4, 4, 7),
+            (0.5, 5, 6),
+            (0.0, 6, 1),
+            (0.0, 7, 2),
+            (2.5, 8, 10),
+            (3.0, 9, 1),
+            (3.0, 10, 1),
+            (3.0, 11, 1),
+        ]
+        for delay_s, idx, reps in schedule:
+            if delay_s > 0:
+                pump_incoming(delay_s)
+            pkt = CONNECT_D0_PACKETS[idx]
+            for _ in range(reps):
+                client.send_raw(pkt)
+                time.sleep(0.02)
+            if len(pkt) > 200:
+                time.sleep(0.1)
+
+        # follow with refresh-phase packets to trigger gallery stream
+        print("Sending refresh-phase D0 packets...")
+        refresh_repeats = [10, 10, 3, 3, 3, 1, 1, 1]
+        for pkt, reps in zip(REFRESH_D0_PACKETS, refresh_repeats):
+            for _ in range(reps):
+                client.send_raw(pkt)
+                time.sleep(0.02)
+            pump_incoming(0.3)
 
         # receive and assemble large D0 stream
         print("Waiting for gallery stream...")
-        large_chunks: Dict[int, bytes] = {}
-        small_chunks: Dict[int, bytes] = {}
         last_recv = time.time()
         last_ack = 0.0
-        deadline = time.time() + 12.0
+        deadline = time.time() + 20.0
 
         while time.time() < deadline:
             got = client.recv()
@@ -456,7 +556,7 @@ async def main():
                     client.send_f1(0xD1, make_ack_body_seq16(list(large_chunks.keys())))
                     last_ack = now
                 # stop if quiet
-                if large_chunks and (now - last_recv) > 1.5:
+                if large_chunks and (now - last_recv) > 2.5:
                     break
                 continue
 
@@ -472,17 +572,19 @@ async def main():
                 client.send_f1(0xE1, b"")
                 continue
 
-            if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1:
+            if opcode == 0xD0 and len(body) >= 4:
                 last_recv = now
+                if args.debug and len(body) >= 1000:
+                    print("D0 large head:", body[:8].hex())
                 # small chunks (seq8)
-                if body[1] == 0x00:
+                if body[0] == 0xD1 and body[1] == 0x00:
                     seq8 = body[3]
                     small_chunks.setdefault(seq8, body[4:])
                     if (now - last_ack) > 0.20:
                         client.send_f1(0xD1, make_ack_body_seq8(list(small_chunks.keys())))
                         last_ack = now
                 # large chunks (seq16)
-                elif body[1] == 0x04:
+                elif body[0] == 0xD1 and body[1] == 0x04:
                     seq16 = (body[2] << 8) | body[3]
                     large_chunks.setdefault(seq16, body[4:])
                     if (now - last_ack) > 0.10:
@@ -490,6 +592,8 @@ async def main():
                         last_ack = now
 
         if not large_chunks:
+            if args.debug:
+                print("No large stream. small_chunks=", len(small_chunks))
             raise SystemExit("Did not receive large gallery stream")
 
         seqs = sorted(large_chunks)
