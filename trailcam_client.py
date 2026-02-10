@@ -530,7 +530,7 @@ def send_full_json_flow(
     token: int,
     page: int = 0,
     per_page: int = 45,
-    listen_s: float = 8.0,
+    listen_s: float = 12.0,
     repeats: int = 3,
     dump_thumbs: bool = False,
 ):
@@ -538,26 +538,42 @@ def send_full_json_flow(
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": per_page, "pageNo": page, "token": token}
 
-    # send a few times like the app does
-    for i in range(repeats):
-        print(f"TX JSON: dev info (attempt {i+1}/{repeats})")
+    # heartbeat / status pings observed in app (typ 0x00010001..0x00010004)
+    stop_hb = threading.Event()
+
+    def hb_loop():
+        typ = 0x00010001
+        while not stop_hb.is_set():
+            client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
+            typ += 1
+            if typ > 0x00010004:
+                typ = 0x00010001
+            stop_hb.wait(0.3)
+
+    t_hb = threading.Thread(target=hb_loop, daemon=True)
+    t_hb.start()
+
+    def send_dev_media(round_idx: int):
+        print(f"TX JSON: dev info (attempt {round_idx}/{repeats})")
         client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
         client.send_cmd_json(dev_info, art_ver=2, art_typ=3)
         time.sleep(0.05)
-        print(f"TX JSON: media list (attempt {i+1}/{repeats})")
+        print(f"TX JSON: media list (attempt {round_idx}/{repeats})")
         client.send_cmd_json(media_list, art_ver=2, art_typ=4)
         time.sleep(0.1)
 
-    # heartbeat / status pings observed in app
-    for i in range(6):
-        typ = 0x00010000 | ((i + 1) & 0xFFFF)
-        client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
-        time.sleep(0.05)
+    # send a few times like the app does, then keep nudging during listen
+    for i in range(repeats):
+        send_dev_media(i + 1)
 
     # listen for any decrypted JSON responses + large D0 stream (gallery)
     large_chunks: Dict[int, bytes] = {}
     end = time.time() + listen_s
+    next_nudge = time.time() + 1.0
     while time.time() < end:
+        if time.time() >= next_nudge:
+            send_dev_media(repeats)
+            next_nudge = time.time() + 1.0
         got = client.recv()
         if not got:
             continue
@@ -582,6 +598,8 @@ def send_full_json_flow(
         objs = client.handle_incoming_payload(data)
         for obj in objs:
             print("RX JSON:", obj)
+
+    stop_hb.set()
 
     if not large_chunks:
         return
