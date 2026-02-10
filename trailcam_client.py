@@ -490,7 +490,6 @@ def send_full_json_flow(
 ):
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": per_page, "pageNo": page, "token": token}
-    heartbeat = {"cmdId": 525}
 
     # send a few times like the app does
     for i in range(repeats):
@@ -499,9 +498,6 @@ def send_full_json_flow(
         time.sleep(0.05)
         print(f"TX JSON: media list (attempt {i+1}/{repeats})")
         client.send_cmd_json(media_list, art_ver=2, art_typ=4)
-        time.sleep(0.05)
-        # heartbeat hint (app spams 525)
-        client.send_cmd_json(heartbeat, art_ver=2, art_typ=5)
         time.sleep(0.1)
 
     # listen for any decrypted JSON responses
@@ -513,6 +509,16 @@ def send_full_json_flow(
         addr, data = got
         if addr[0] != CAMERA_IP:
             continue
+        parsed = unpack_f1(data)
+        if parsed:
+            opcode, body, _ = parsed
+            if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+                seq8 = body[3]
+                client.send_f1(0xD1, make_ack_body_seq8([seq8]))
+                # show ARTEMIS metadata for visibility
+                for ver, typ, payload in parse_artemis_records(body[4:]):
+                    print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
+
         objs = client.handle_incoming_payload(data)
         for obj in objs:
             print("RX JSON:", obj)
