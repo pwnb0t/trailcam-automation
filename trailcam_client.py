@@ -511,15 +511,50 @@ def send_full_json_flow(
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="TrailCam minimal client (wake/connect/refresh gallery)")
-    parser.add_argument("--ble-address", default=DEFAULT_BLE_ADDRESS)
-    parser.add_argument("--skip-ble", action="store_true", help="skip BLE wake/creds")
-    parser.add_argument("--ifname", default=WIFI_IFNAME)
-    parser.add_argument("--port", type=int, default=LOCAL_PORT)
-    parser.add_argument("--thumbs", action="store_true", help="write thumbnails to out/thumbnails")
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--login-only", action="store_true", help="perform JSON login and exit")
-    parser.add_argument("--json-flow", action="store_true", help="send dev info + media list JSON flow")
+    parser = argparse.ArgumentParser(
+        description="TrailCam client: BLE wake, connect, JSON login, and media list."
+    )
+    parser.add_argument(
+        "--ble-address",
+        default=DEFAULT_BLE_ADDRESS,
+        help="BLE MAC address of the camera (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--skip-ble",
+        action="store_true",
+        help="Skip BLE wake/credentials. Assumes you are already connected to the camera AP.",
+    )
+    parser.add_argument(
+        "--ifname",
+        default=WIFI_IFNAME,
+        help="Wi-Fi interface to use (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=LOCAL_PORT,
+        help="Local UDP port to bind (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--thumbs",
+        action="store_true",
+        help="(Legacy) write thumbnails to out/thumbnails (legacy flow removed)",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable verbose logging of incoming packets",
+    )
+    parser.add_argument(
+        "--login-only",
+        action="store_true",
+        help="Perform JSON login only and exit",
+    )
+    parser.add_argument(
+        "--json-flow",
+        action="store_true",
+        help="After login, send dev info (cmdId=512) and media list (cmdId=768)",
+    )
     args = parser.parse_args()
 
     if not args.skip_ble:
