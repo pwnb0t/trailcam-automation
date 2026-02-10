@@ -415,7 +415,9 @@ def decrypt_cmd_b64(b64: bytes) -> Optional[Dict]:
         except Exception:
             return None
         if len(ct) % 16 != 0:
-            return None
+            ct = ct[: len(ct) - (len(ct) % 16)]
+            if not ct:
+                return None
         cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
         dec = cipher.decryptor()
         pt = dec.update(ct) + dec.finalize()
@@ -492,6 +494,89 @@ def decrypt_artemis_json(body: bytes) -> List[Dict]:
     return out
 
 
+def get_seed_thumbnail_reqs() -> Optional[List[Dict]]:
+    # Extract thumbnail request list by reassembling seq8 stream from capture
+    seq8_chunks: Dict[int, bytes] = {}
+    for pkt in CONNECT_D0_PACKETS:
+        if len(pkt) < 8 or pkt[0] != 0xF1 or pkt[1] != 0xD0:
+            continue
+        blen = int.from_bytes(pkt[2:4], "big")
+        body = pkt[4 : 4 + blen]
+        if len(body) < 4 or body[0] != 0xD1 or body[1] != 0x00:
+            continue
+        seq8 = body[3]
+        seq8_chunks[seq8] = body[4:]
+
+    if not seq8_chunks:
+        return None
+
+    assembled = b"".join(seq8_chunks[k] for k in sorted(seq8_chunks))
+    for _ver, _typ, payload in parse_artemis_records(assembled):
+        # Attempt standard decrypt first
+        obj = decrypt_cmd_b64(payload)
+        if obj and obj.get("cmdId") == 772 and "thumbnailReqs" in obj:
+            return obj["thumbnailReqs"]
+
+        # Best-effort fallback: decrypt partial and regex out entries
+        if payload.find(b"{") == -1:
+            # assume base64 ciphertext
+            try:
+                import re
+
+                allowed = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+                b64 = bytearray()
+                for ch in payload:
+                    if ch in allowed:
+                        b64.append(ch)
+                    elif b64:
+                        break
+                if not b64:
+                    continue
+
+                plaintext = None
+                for trim in range(4):
+                    cand = bytes(b64[: len(b64) - trim]) if trim else bytes(b64)
+                    pad = (-len(cand)) % 4
+                    cand = cand + b"=" * pad
+                    try:
+                        ct = base64.b64decode(cand)
+                    except Exception:
+                        continue
+                    if len(ct) % 16 != 0:
+                        ct = ct[: len(ct) - (len(ct) % 16)]
+                    if not ct:
+                        continue
+                    cipher = Cipher(
+                        algorithms.AES(AES_CMD_KEY),
+                        modes.CBC(AES_CMD_IV),
+                        backend=default_backend(),
+                    )
+                    pt = cipher.decryptor().update(ct) + cipher.decryptor().finalize()
+                    plaintext = pt.decode("utf-8", errors="ignore")
+                    break
+
+                if not plaintext:
+                    continue
+
+                reqs = []
+                for m in re.finditer(
+                    r'\{"fileType":(\d+),"dirNum":(\d+),"mediaNum":(\d+)\}',
+                    plaintext,
+                ):
+                    reqs.append(
+                        {
+                            "fileType": int(m.group(1)),
+                            "dirNum": int(m.group(2)),
+                            "mediaNum": int(m.group(3)),
+                        }
+                    )
+                if reqs:
+                    return reqs
+            except Exception:
+                continue
+    return None
+
+
 def login_and_get_token(
     client: TrailCamClient,
     username: str,
@@ -510,6 +595,8 @@ def login_and_get_token(
     }
     for _ in range(retries):
         client.send_cmd_json(login_obj, art_ver=2, art_typ=1)
+        # connect-phase login variant observed in pcap (typ=33)
+        client.send_cmd_json(login_obj, art_ver=2, art_typ=33)
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             got = client.recv()
@@ -537,6 +624,13 @@ def send_full_json_flow(
     time.sleep(0.3)
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": per_page, "pageNo": page, "token": token}
+    thumb_reqs = get_seed_thumbnail_reqs()
+    thumb_cmd = None
+    if thumb_reqs:
+        thumb_cmd = {"cmdId": 772, "thumbnailReqs": thumb_reqs, "token": token}
+    else:
+        # attempt with empty list if we can't recover seed list
+        thumb_cmd = {"cmdId": 772, "thumbnailReqs": [], "token": token}
 
     # heartbeat / status pings observed in app (typ 0x00010001..0x00010004)
     stop_hb = threading.Event()
@@ -557,9 +651,17 @@ def send_full_json_flow(
         print(f"TX JSON: dev info (attempt {round_idx}/{repeats})")
         client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
         client.send_cmd_json(dev_info, art_ver=2, art_typ=3)
+        # connect-phase variants observed in pcap (typ=34/35)
+        client.send_cmd_json(dev_info, art_ver=2, art_typ=34)
+        client.send_cmd_json(dev_info, art_ver=2, art_typ=35)
         time.sleep(0.05)
         print(f"TX JSON: media list (attempt {round_idx}/{repeats})")
         client.send_cmd_json(media_list, art_ver=2, art_typ=4)
+        # connect-phase variant observed in pcap (typ=36)
+        client.send_cmd_json(media_list, art_ver=2, art_typ=36)
+        if thumb_cmd:
+            print(f"TX JSON: thumbs (attempt {round_idx}/{repeats})")
+            client.send_cmd_json(thumb_cmd, art_ver=2, art_typ=37)
         time.sleep(0.1)
 
     # send a few times like the app does, then keep nudging during listen
@@ -717,6 +819,9 @@ async def main():
         await asyncio.sleep(0.2)
     if not wifi_has_camera_ip(args.ifname):
         raise SystemExit("Connected but did not get 192.168.43.x address")
+
+    # give the camera a moment after Wi-Fi connect
+    await asyncio.sleep(1.0)
 
     print("Connected to camera AP. Starting UDP session...")
     client = TrailCamClient(local_port=args.port)
