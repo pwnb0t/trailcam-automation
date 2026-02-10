@@ -132,6 +132,44 @@ def decrypt_cmd_b64(b64: bytes) -> Optional[Dict]:
     return None
 
 
+def decrypt_payload_b64_bytes(payload: bytes) -> Optional[Dict]:
+    # Similar to decrypt_cmd_b64 but works on raw ARTEMIS payload bytes
+    try:
+        if b"\x00" in payload:
+            payload = payload.split(b"\x00", 1)[0]
+        allowed = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+        cleaned = bytearray()
+        for ch in payload:
+            if ch in allowed:
+                cleaned.append(ch)
+            elif cleaned:
+                break
+        if not cleaned:
+            return None
+        b64 = bytes(cleaned)
+        pad = (-len(b64)) % 4
+        b64 += b"=" * pad
+        ct = base64.b64decode(b64)
+    except Exception:
+        return None
+    if len(ct) % 16 != 0:
+        ct = ct[: len(ct) - (len(ct) % 16)]
+        if not ct:
+            return None
+    cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
+    dec = cipher.decryptor()
+    pt = dec.update(ct) + dec.finalize()
+    pt = pt.rstrip(b"\x00")
+    start = pt.find(b"{")
+    end = pt.rfind(b"}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        return json.loads(pt[start : end + 1].decode("utf-8", errors="replace"))
+    except Exception:
+        return None
+
+
 def build_artemis_record(payload_b64: bytes, ver: int, typ: int) -> bytes:
     header = b"ARTEMIS\x00"
     header += struct.pack("<I", ver)

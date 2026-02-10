@@ -10,6 +10,7 @@ from config import CAMERA_IP, WIFI_IFNAME
 from protocol import (
     decrypt_artemis_json,
     decrypt_cmd_b64,
+    decrypt_payload_b64_bytes,
     make_ack_body_seq16,
     make_ack_body_seq8,
     parse_artemis_records,
@@ -216,7 +217,7 @@ def send_full_json_flow(
                         fname = out_dir / f"rx_ver{ver}_typ{typ}_seq{seq8}.bin"
                         fname.write_bytes(payload)
                     if typ in (4, 36):
-                        obj = decrypt_cmd_b64(payload)
+                        obj = decrypt_payload_b64_bytes(payload)
                         if obj:
                             print("RX JSON media list:", obj)
             elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
