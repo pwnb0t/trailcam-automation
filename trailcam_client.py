@@ -614,17 +614,6 @@ async def main():
         # start keepalive loop
         client.start_keepalive(interval_s=1.0)
 
-        token = login_and_get_token(client, "admin", "admin")
-        if token is None:
-            print("Login token not found yet.")
-        else:
-            client.token_int = token
-            print(f"Login token: {token}")
-            if args.login_only:
-                return
-            if args.json_flow:
-                send_full_json_flow(client, token)
-
         # prelude: wait for handshake/status and echo 0x41/0x42
         seen_ops = {}
         start = time.time()
@@ -649,14 +638,25 @@ async def main():
                 client.send_f1(opcode, body)
             elif opcode == 0xE0:
                 client.send_f1(0xE1, b"")
-            elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
-                # ACK small seq8 chunks even during handshake
-                seq8 = body[3]
-                ack = make_ack_body_seq8([seq8])
-                client.send_f1(0xD1, ack)
+                elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+                    # ACK small seq8 chunks even during handshake
+                    seq8 = body[3]
+                    ack = make_ack_body_seq8([seq8])
+                    client.send_f1(0xD1, ack)
 
         if args.debug:
             print("Handshake opcodes seen:", {hex(k): v for k, v in seen_ops.items()})
+
+        token = login_and_get_token(client, "admin", "admin")
+        if token is None:
+            print("Login token not found yet.")
+        else:
+            client.token_int = token
+            print(f"Login token: {token}")
+            if args.login_only:
+                return
+            if args.json_flow:
+                send_full_json_flow(client, token)
 
         large_chunks: Dict[int, bytes] = {}
         small_chunks: Dict[int, bytes] = {}
