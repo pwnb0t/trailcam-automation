@@ -568,6 +568,8 @@ def send_full_json_flow(
 
     # listen for any decrypted JSON responses + large D0 stream (gallery)
     large_chunks: Dict[int, bytes] = {}
+    seen_seq8: set[int] = set()
+    seen_seq16: set[int] = set()
     end = time.time() + listen_s
     next_nudge = time.time() + 1.0
     while time.time() < end:
@@ -583,15 +585,22 @@ def send_full_json_flow(
         parsed = unpack_f1(data)
         if parsed:
             opcode, body, _ = parsed
+            if opcode in (0x41, 0x42):
+                # echo back like app
+                client.send_f1(opcode, body)
+            elif opcode == 0xE0:
+                client.send_f1(0xE1, b"")
             if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
                 seq8 = body[3]
-                client.send_f1(0xD1, make_ack_body_seq8([seq8]))
+                seen_seq8.add(seq8)
+                client.send_f1(0xD1, make_ack_body_seq8(sorted(seen_seq8)))
                 # show ARTEMIS metadata for visibility
                 for ver, typ, payload in parse_artemis_records(body[4:]):
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
             elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
                 seq16 = (body[2] << 8) | body[3]
-                client.send_f1(0xD1, make_ack_body_seq16([seq16]))
+                seen_seq16.add(seq16)
+                client.send_f1(0xD1, make_ack_body_seq16(sorted(seen_seq16)))
                 # large gallery stream chunk
                 large_chunks[seq16] = body[4:]
 
