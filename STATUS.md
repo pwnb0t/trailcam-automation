@@ -97,3 +97,41 @@ python3 trailcam_client.py --ssid TrailCam_5DBD --json-flow --debug --thumb-offs
 ```
 
 This retrieves the newest media list and thumbnails for the current camera.
+
+
+------
+
+• Here’s what’s in pcap/trailcam_1.pcap, and which commands look new/un‑analyzed compared to what we’ve already documented.
+
+  Decoded command IDs found in trailcam_1.pcap:
+
+  - cmdId=0 (login)
+    ver=2 typ=19, ver=3 typ=19
+  - cmdId=512 (dev info)
+    ver=2 typ=20/21
+  - cmdId=768 (media list)
+    ver=2 typ=22/24
+  - cmdId=769 (NEW)
+    ver=2 typ=31, ver=3 typ=31
+  - cmdId=770 (NEW)
+    ver=2 typ=32, ver=3 typ=32
+  - cmdId=772 (thumbs)
+    ver=3 typ=23/25
+  - cmdId=1285 (NEW – file download start)
+    ver=3 typ=26/27/28/29/30
+  - cmdId=525 (heartbeat/status)
+    ver=2 typ=65537..65554 (many variants)
+
+  Commands we haven’t analyzed yet:
+
+  1. cmdId=769
+     Appears frequently. Not documented. Likely a query or paging‑related command.
+  2. cmdId=770
+     Appears with cmdId=769. Also not documented.
+  3. cmdId=1285 (file download start)
+     We haven’t decoded its request/response format yet.
+  4. Undecoded ARTEMIS records
+      - ver=2 typ=23/25 (1004‑byte payloads) — likely related to cmdId=772 responses.
+      - ver=4 typ=1..9 (various sizes) — not decoded at all. These might be binary responses or a different channel.
+
+  If you want, I can drill into any of these (e.g., decode cmdId=769/770 or start mapping cmdId=1285), or produce a full listing of the undecoded ARTEMIS records with payload samples.
