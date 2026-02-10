@@ -638,11 +638,11 @@ async def main():
                 client.send_f1(opcode, body)
             elif opcode == 0xE0:
                 client.send_f1(0xE1, b"")
-                elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
-                    # ACK small seq8 chunks even during handshake
-                    seq8 = body[3]
-                    ack = make_ack_body_seq8([seq8])
-                    client.send_f1(0xD1, ack)
+            elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+                # ACK small seq8 chunks even during handshake
+                seq8 = body[3]
+                ack = make_ack_body_seq8([seq8])
+                client.send_f1(0xD1, ack)
 
         if args.debug:
             print("Handshake opcodes seen:", {hex(k): v for k, v in seen_ops.items()})
