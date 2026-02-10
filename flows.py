@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from client import TrailCamClient
-from config import CAMERA_IP, WIFI_IFNAME
+from constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
 from protocol import (
     decrypt_artemis_json,
     decrypt_cmd_b64,
@@ -86,15 +86,13 @@ def handshake_prelude(client: TrailCamClient, debug: bool = False, duration_s: f
 
 def login_and_get_token(
     client: TrailCamClient,
-    username: str,
-    password: str,
     timeout_s: float = 5.0,
     retries: int = 3,
 ) -> Optional[int]:
     login_obj = {
         "cmdId": 0,
-        "usrName": username,
-        "password": password,
+        "usrName": CAMERA_USERNAME,
+        "password": CAMERA_PASSWORD,
         "needVideo": 0,
         "needAudio": 0,
         "utcTime": int(time.time()),

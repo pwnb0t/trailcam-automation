@@ -4,7 +4,7 @@ import threading
 import time
 from typing import Dict, List, Optional, Tuple
 
-from config import CAMERA_IP, DISCOVERY_PORT, LOCAL_PORT
+from constants import CAMERA_IP, DISCOVERY_PORT, LOCAL_PORT
 from protocol import build_artemis_record, decrypt_artemis_json, encrypt_cmd_json, unpack_f1
 
 

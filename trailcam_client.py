@@ -5,7 +5,7 @@ import threading
 import time
 
 from client import TrailCamClient
-from config import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
+from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
 from ble import ble_wake_and_get_creds
 from flows import (
     handshake_prelude,
@@ -161,7 +161,7 @@ async def main():
         client.start_keepalive(interval_s=1.0)
         handshake_prelude(client, debug=args.debug, duration_s=3.0)
 
-        token = login_and_get_token(client, "admin", "admin")
+        token = login_and_get_token(client)
         if token is None:
             print("Login token not found yet.")
         else:
