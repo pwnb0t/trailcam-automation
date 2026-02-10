@@ -177,6 +177,7 @@ async def main():
                     thumb_offset=args.thumb_offset,
                     thumb_dir=args.thumb_dir,
                     dump_artemis=args.dump_artemis,
+                    debug=args.debug,
                 )
 
     finally:

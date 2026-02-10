@@ -127,6 +127,7 @@ def send_full_json_flow(
     thumb_offset: int = 0,
     thumb_dir: Optional[int] = None,
     dump_artemis: bool = False,
+    debug: bool = False,
 ):
     time.sleep(0.3)
     dev_info = {"cmdId": 512, "token": token}
@@ -182,6 +183,7 @@ def send_full_json_flow(
         send_dev_media(i + 1)
 
     large_chunks: Dict[int, bytes] = {}
+    seq8_chunks: Dict[int, bytes] = {}
     seen_seq8: set[int] = set()
     seen_seq16: set[int] = set()
     end = time.time() + listen_s
@@ -207,6 +209,7 @@ def send_full_json_flow(
                 seq8 = body[3]
                 seen_seq8.add(seq8)
                 client.send_f1(0xD1, make_ack_body_seq8(sorted(seen_seq8)))
+                seq8_chunks[seq8] = body[4:]
                 for ver, typ, payload in parse_artemis_records(body[4:]):
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
                     if dump_artemis and typ in (4, 36):
@@ -216,7 +219,7 @@ def send_full_json_flow(
                         fname.write_bytes(payload)
                     if typ in (4, 36):
                         obj = decrypt_payload_b64_bytes(payload)
-                        if obj:
+                        if obj and debug:
                             print("RX JSON media list:", obj)
             elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
                 seq16 = (body[2] << 8) | body[3]
@@ -231,7 +234,24 @@ def send_full_json_flow(
     stop_hb.set()
 
     if not large_chunks:
+        # still try to parse seq8 stream for media list JSON
+        if seq8_chunks:
+            assembled_small = b"".join(seq8_chunks[k] for k in sorted(seq8_chunks))
+            for ver, typ, payload in parse_artemis_records(assembled_small):
+                if typ in (4, 36):
+                    obj = decrypt_payload_b64_bytes(payload)
+                    if obj and debug:
+                        print("RX JSON media list:", obj)
         return
+
+    # parse seq8 stream for media list JSON (multi-chunk)
+    if seq8_chunks:
+        assembled_small = b"".join(seq8_chunks[k] for k in sorted(seq8_chunks))
+        for ver, typ, payload in parse_artemis_records(assembled_small):
+            if typ in (4, 36):
+                obj = decrypt_payload_b64_bytes(payload)
+                if obj and debug:
+                    print("RX JSON media list:", obj)
 
     assembled = b"".join(large_chunks[k] for k in sorted(large_chunks))
     print(f"Large D0 stream: {len(large_chunks)} chunks, {len(assembled)} bytes")
