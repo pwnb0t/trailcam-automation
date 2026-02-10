@@ -485,16 +485,24 @@ def send_full_json_flow(
     token: int,
     page: int = 0,
     per_page: int = 45,
-    listen_s: float = 3.0,
+    listen_s: float = 8.0,
+    repeats: int = 3,
 ):
-    # cmdId 512 (dev info)
     dev_info = {"cmdId": 512, "token": token}
-    client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
-    time.sleep(0.05)
-
-    # cmdId 768 (media list)
     media_list = {"cmdId": 768, "itemCntPerPage": per_page, "pageNo": page, "token": token}
-    client.send_cmd_json(media_list, art_ver=2, art_typ=4)
+    heartbeat = {"cmdId": 525}
+
+    # send a few times like the app does
+    for i in range(repeats):
+        print(f"TX JSON: dev info (attempt {i+1}/{repeats})")
+        client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
+        time.sleep(0.05)
+        print(f"TX JSON: media list (attempt {i+1}/{repeats})")
+        client.send_cmd_json(media_list, art_ver=2, art_typ=4)
+        time.sleep(0.05)
+        # heartbeat hint (app spams 525)
+        client.send_cmd_json(heartbeat, art_ver=2, art_typ=5)
+        time.sleep(0.1)
 
     # listen for any decrypted JSON responses
     end = time.time() + listen_s
