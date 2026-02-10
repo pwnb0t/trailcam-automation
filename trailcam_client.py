@@ -306,11 +306,21 @@ class TrailCamClient:
 
     def send_cmd_json(self, obj: Dict, art_ver: int = 2, art_typ: int = 1):
         payload_b64 = encrypt_cmd_json(obj)
+        # app capture shows a trailing NUL on the base64 payload
+        if not payload_b64.endswith(b"\x00"):
+            payload_b64 += b"\x00"
         art = build_artemis_record(payload_b64, art_ver, art_typ)
-        seq = self._seq8 & 0xFF
-        self._seq8 = (self._seq8 + 1) & 0xFF
-        body = bytes([0xD1, 0x00, 0x00, seq]) + art
-        self.send_f1(0xD0, body)
+
+        # split into 1024-byte chunks (matches app capture for large requests)
+        max_chunk = 1024
+        offset = 0
+        while offset < len(art):
+            chunk = art[offset : offset + max_chunk]
+            seq = self._seq8 & 0xFF
+            self._seq8 = (self._seq8 + 1) & 0xFF
+            body = bytes([0xD1, 0x00, 0x00, seq]) + chunk
+            self.send_f1(0xD0, body)
+            offset += max_chunk
 
     def handle_incoming_payload(self, data: bytes) -> List[Dict]:
         parsed = unpack_f1(data)
@@ -620,6 +630,8 @@ def send_full_json_flow(
     listen_s: float = 12.0,
     repeats: int = 3,
     dump_thumbs: bool = False,
+    thumb_offset: int = 0,
+    thumb_dir: Optional[int] = None,
 ):
     time.sleep(0.3)
     dev_info = {"cmdId": 512, "token": token}
@@ -627,6 +639,16 @@ def send_full_json_flow(
     thumb_reqs = get_seed_thumbnail_reqs()
     thumb_cmd = None
     if thumb_reqs:
+        if thumb_offset or thumb_dir is not None:
+            adj = []
+            for r in thumb_reqs:
+                nr = dict(r)
+                if thumb_offset:
+                    nr["mediaNum"] = int(nr["mediaNum"]) + int(thumb_offset)
+                if thumb_dir is not None:
+                    nr["dirNum"] = int(thumb_dir)
+                adj.append(nr)
+            thumb_reqs = adj
         thumb_cmd = {"cmdId": 772, "thumbnailReqs": thumb_reqs, "token": token}
     else:
         # attempt with empty list if we can't recover seed list
@@ -786,6 +808,18 @@ async def main():
         action="store_true",
         help="After login, send dev info (cmdId=512) and media list (cmdId=768)",
     )
+    parser.add_argument(
+        "--thumb-offset",
+        type=int,
+        default=0,
+        help="Offset mediaNum for thumbnailReqs (use to align with current files)",
+    )
+    parser.add_argument(
+        "--thumb-dir",
+        type=int,
+        default=None,
+        help="Override dirNum for thumbnailReqs (e.g. 100/101/102)",
+    )
     args = parser.parse_args()
 
     if not args.skip_ble:
@@ -890,7 +924,13 @@ async def main():
             if args.login_only:
                 return
             if args.json_flow:
-                send_full_json_flow(client, token, dump_thumbs=args.dump_thumbs)
+                send_full_json_flow(
+                    client,
+                    token,
+                    dump_thumbs=args.dump_thumbs,
+                    thumb_offset=args.thumb_offset,
+                    thumb_dir=args.thumb_dir,
+                )
 
         # Legacy D0 packet sequence removed; JSON flow above is the only supported path now.
 
