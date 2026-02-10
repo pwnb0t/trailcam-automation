@@ -9,6 +9,7 @@ import struct
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from bleak import BleakClient
@@ -408,22 +409,66 @@ def encrypt_cmd_json(obj: Dict) -> bytes:
 
 
 def decrypt_cmd_b64(b64: bytes) -> Optional[Dict]:
+    def try_decode(candidate: bytes) -> Optional[Dict]:
+        try:
+            ct = base64.b64decode(candidate)
+        except Exception:
+            return None
+        if len(ct) % 16 != 0:
+            return None
+        cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
+        dec = cipher.decryptor()
+        pt = dec.update(ct) + dec.finalize()
+        pt = pt.rstrip(b"\x00")
+        start = pt.find(b"{")
+        end = pt.rfind(b"}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            return json.loads(pt[start : end + 1].decode("utf-8", errors="replace"))
+        except Exception:
+            return None
+
     try:
-        ct = base64.b64decode(b64)
+        allowed = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+        cleaned = bytearray()
+        for ch in b64:
+            if ch in allowed:
+                cleaned.append(ch)
+            elif cleaned:
+                break
+        b64 = bytes(cleaned).strip()
+        if not b64:
+            return None
     except Exception:
         return None
-    if len(ct) % 16 != 0:
-        return None
-    cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
-    dec = cipher.decryptor()
-    pt = dec.update(ct) + dec.finalize()
-    pt = pt.rstrip(b"\x00")
-    if not pt.startswith(b"{"):
-        return None
+
+    candidates = [b64]
+    if b"=" in b64:
+        candidates.append(b64[: b64.rfind(b"=") + 1])
+    if len(b64) % 4 != 0:
+        candidates.append(b64[: len(b64) - (len(b64) % 4)])
+
+    for cand in candidates:
+        obj = try_decode(cand)
+        if obj:
+            return obj
+
+    # fallback: find long base64 substrings
     try:
-        return json.loads(pt.decode("utf-8", errors="replace"))
+        import re
+
+        for m in re.findall(rb"[A-Za-z0-9+/=]{32,}", b64):
+            extra = [m]
+            if b"=" in m:
+                extra.append(m[: m.rfind(b"=") + 1])
+            for cand in extra:
+                obj = try_decode(cand)
+                if obj:
+                    return obj
     except Exception:
-        return None
+        pass
+    return None
 
 
 def build_artemis_record(payload_b64: bytes, ver: int, typ: int) -> bytes:
@@ -487,6 +532,7 @@ def send_full_json_flow(
     per_page: int = 45,
     listen_s: float = 8.0,
     repeats: int = 3,
+    dump_thumbs: bool = False,
 ):
     time.sleep(0.3)
     dev_info = {"cmdId": 512, "token": token}
@@ -496,12 +542,20 @@ def send_full_json_flow(
     for i in range(repeats):
         print(f"TX JSON: dev info (attempt {i+1}/{repeats})")
         client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
+        client.send_cmd_json(dev_info, art_ver=2, art_typ=3)
         time.sleep(0.05)
         print(f"TX JSON: media list (attempt {i+1}/{repeats})")
         client.send_cmd_json(media_list, art_ver=2, art_typ=4)
         time.sleep(0.1)
 
-    # listen for any decrypted JSON responses
+    # heartbeat / status pings observed in app
+    for i in range(6):
+        typ = 0x00010000 | ((i + 1) & 0xFFFF)
+        client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
+        time.sleep(0.05)
+
+    # listen for any decrypted JSON responses + large D0 stream (gallery)
+    large_chunks: Dict[int, bytes] = {}
     end = time.time() + listen_s
     while time.time() < end:
         got = client.recv()
@@ -522,12 +576,40 @@ def send_full_json_flow(
             elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
                 seq16 = (body[2] << 8) | body[3]
                 client.send_f1(0xD1, make_ack_body_seq16([seq16]))
-                for ver, typ, payload in parse_artemis_records(body[4:]):
-                    print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
+                # large gallery stream chunk
+                large_chunks[seq16] = body[4:]
 
         objs = client.handle_incoming_payload(data)
         for obj in objs:
             print("RX JSON:", obj)
+
+    if not large_chunks:
+        return
+
+    # reassemble large stream by seq16
+    assembled = b"".join(large_chunks[k] for k in sorted(large_chunks))
+    print(f"Large D0 stream: {len(large_chunks)} chunks, {len(assembled)} bytes")
+
+    records = parse_artemis_records(assembled)
+    if not records:
+        print("No ARTEMIS records found in large stream")
+        return
+
+    print(f"Gallery records: {len(records)}")
+    out_dir = Path("out")
+    if dump_thumbs:
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, (ver, typ, payload) in enumerate(records, start=1):
+        if len(payload) < 72:
+            continue
+        mac = payload[0:17].decode("ascii", errors="ignore").strip("\x00")
+        record_id = int.from_bytes(payload[0x22:0x24], "little")
+        jpeg_len = int.from_bytes(payload[0x24:0x26], "little")
+        jpeg = payload[72 : 72 + jpeg_len]
+        print(f"  {idx:02d}: record_id={record_id} jpeg_len={jpeg_len} mac={mac}")
+        if dump_thumbs and jpeg.startswith(b"\xff\xd8"):
+            (out_dir / f"thumb_{record_id}.jpg").write_bytes(jpeg)
 
 
 async def main():
@@ -556,9 +638,9 @@ async def main():
         help="Local UDP port to bind (default: %(default)s)",
     )
     parser.add_argument(
-        "--thumbs",
+        "--dump-thumbs",
         action="store_true",
-        help="(Legacy) write thumbnails to out/thumbnails (legacy flow removed)",
+        help="Write gallery thumbnails from large D0 stream to out/",
     )
     parser.add_argument(
         "--debug",
@@ -676,41 +758,7 @@ async def main():
             if args.login_only:
                 return
             if args.json_flow:
-                send_full_json_flow(client, token)
-
-        large_chunks: Dict[int, bytes] = {}
-        small_chunks: Dict[int, bytes] = {}
-
-        def pump_incoming(duration_s: float):
-            end = time.time() + duration_s
-            while time.time() < end:
-                got = client.recv()
-                if not got:
-                    continue
-                addr, data = got
-                if addr[0] != CAMERA_IP:
-                    continue
-                parsed = unpack_f1(data)
-                if not parsed:
-                    continue
-                opcode, body, _ = parsed
-                if args.debug:
-                    print(f"RX opcode=0x{opcode:02x} len={len(body)}")
-                if opcode in (0x41, 0x42):
-                    client.send_f1(opcode, body)
-                elif opcode == 0xE0:
-                    client.send_f1(0xE1, b"")
-                elif opcode == 0xD0 and len(body) >= 4:
-                    if args.debug and len(body) >= 1000:
-                        print("D0 large head:", body[:8].hex())
-                    if body[0] == 0xD1 and body[1] == 0x00:
-                        seq8 = body[3]
-                        small_chunks.setdefault(seq8, body[4:])
-                        client.send_f1(0xD1, make_ack_body_seq8(list(small_chunks.keys())))
-                    elif body[0] == 0xD1 and body[1] == 0x04:
-                        seq16 = (body[2] << 8) | body[3]
-                        large_chunks.setdefault(seq16, body[4:])
-                        client.send_f1(0xD1, make_ack_body_seq16(list(large_chunks.keys())))
+                send_full_json_flow(client, token, dump_thumbs=args.dump_thumbs)
 
         # Legacy D0 packet sequence removed; JSON flow above is the only supported path now.
 

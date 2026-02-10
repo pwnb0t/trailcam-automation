@@ -103,7 +103,26 @@ This implies the phone performs **extra setup/auth steps** immediately after con
 
 ---
 
-## 6. Seq16 Behavior Difference vs Refresh
+## 6. ARTEMIS Types by Command (Connect Capture)
+
+From `pcap/trailcam_7-1-connect.pcap` after decrypting `ARTEMIS` records with the
+AES key (`xs38nul7cqf7m1va`), the app’s **outgoing** command mapping is:
+
+- `cmdId=0` (login): `ver=2 typ=1`
+- `cmdId=512` (dev info): `ver=2 typ=2` **and** `ver=2 typ=3`
+- `cmdId=768` (media list): `ver=2 typ=4`
+- `cmdId=525` (heartbeat/status): `ver=2 typ=0x00010001..0x00010004` (increments)
+
+The camera’s **incoming** responses on the small `D0` stream include:
+
+- `cmdId=0` login response: `ver=3 typ=1`
+- `cmdId=772` response/ack: `ver=3 typ=5`
+
+This explains why sending only `typ=2` for dev info was insufficient.
+
+---
+
+## 7. Seq16 Behavior Difference vs Refresh
 
 Connect capture seq16 range:
 
@@ -118,7 +137,7 @@ Our client must **not assume seq starts at 0**, only that it is strictly increas
 
 ---
 
-## 7. Open Questions from Connect Phase
+## 8. Open Questions from Connect Phase
 
 1. Which specific `D0` request(s) trigger the large gallery stream?
 2. What is the meaning of `0x42`?
@@ -127,11 +146,10 @@ Our client must **not assume seq starts at 0**, only that it is strictly increas
 
 ---
 
-## 8. Practical Implication for Client Design
+## 9. Practical Implication for Client Design
 
 A minimal future client should:
 
 - Reproduce **connect-phase request set** (not just refresh packets)
 - Be prepared for the gallery stream **during connect**
 - Parse `D0` large stream by seq16, regardless of starting value
-
