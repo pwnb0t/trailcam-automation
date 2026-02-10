@@ -81,9 +81,14 @@ async def main():
         creds = await ble_wake_and_get_creds(args.ble_address)
         ssid = creds["ssid"]
         pwd = creds["pwd"]
+        if isinstance(pwd, str):
+            pwd = pwd.strip("\x00").strip()
 
         if not ssid or not pwd:
+            print(f"BLE creds: ssid={ssid} pwd={'<set>' if pwd else None}")
             raise SystemExit("SSID/PWD not returned from BLE wake")
+
+        print(f"BLE creds: ssid={ssid} pwd_len={len(pwd)}")
 
         print(f"SSID={ssid}")
         print("Waiting for SSID to appear in scans...")
@@ -100,6 +105,8 @@ async def main():
         print("Connecting to camera Wi-Fi...")
         if not nmcli_connect(ssid, pwd, args.ifname):
             raise SystemExit("nmcli connect failed")
+    else:
+        print("Camera AP already visible; skipping BLE wake")
 
     for _ in range(30):
         if wifi_has_camera_ip(args.ifname):

@@ -18,34 +18,35 @@ from seed import get_seed_thumbnail_reqs
 
 
 def nmcli_rescan() -> None:
-    subprocess.run(["nmcli", "dev", "wifi", "rescan"], capture_output=True)
+    subprocess.run(["sudo", "nmcli", "dev", "wifi", "rescan"], capture_output=True)
 
 
 def nmcli_list_ssids() -> List[str]:
-    p = subprocess.run(["nmcli", "-t", "-f", "SSID", "dev", "wifi"], text=True, capture_output=True)
+    p = subprocess.run(["sudo", "nmcli", "-t", "-f", "SSID", "dev", "wifi"], text=True, capture_output=True)
     if p.returncode != 0:
         return []
     return [line.strip() for line in p.stdout.splitlines() if line.strip()]
 
 
 def nmcli_connect(ssid: str, pwd: str, ifname: str = WIFI_IFNAME) -> bool:
-    p = subprocess.run(
-        ["nmcli", "dev", "wifi", "connect", ssid, "password", pwd, "ifname", ifname],
-        text=True,
-        capture_output=True,
-    )
+    # remove stale profile first
+    subprocess.run(["sudo", "nmcli", "con", "delete", "id", ssid], text=True, capture_output=True)
+    cmd = ["sudo", "nmcli", "dev", "wifi", "connect", ssid, "password", pwd, "ifname", ifname]
+    p = subprocess.run(cmd, text=True, capture_output=True)
     if p.returncode != 0:
+        err = (p.stderr or "").strip()
+        out = (p.stdout or "").strip()
         print("nmcli connect failed:")
-        if p.stdout:
-            print(p.stdout.strip())
-        if p.stderr:
-            print(p.stderr.strip())
+        if out:
+            print(out)
+        if err:
+            print(err)
         return False
     return True
 
 
 def wifi_has_camera_ip(ifname: str = WIFI_IFNAME) -> bool:
-    p = subprocess.run(["ip", "-br", "addr", "show", ifname], text=True, capture_output=True)
+    p = subprocess.run(["sudo", "ip", "-br", "addr", "show", ifname], text=True, capture_output=True)
     out = p.stdout.strip()
     return "192.168.43." in out
 
