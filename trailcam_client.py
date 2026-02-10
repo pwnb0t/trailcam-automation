@@ -514,45 +514,37 @@ async def main():
     parser = argparse.ArgumentParser(description="TrailCam minimal client (wake/connect/refresh gallery)")
     parser.add_argument("--ble-address", default=DEFAULT_BLE_ADDRESS)
     parser.add_argument("--skip-ble", action="store_true", help="skip BLE wake/creds")
-    parser.add_argument("--ssid")
-    parser.add_argument("--pwd")
     parser.add_argument("--ifname", default=WIFI_IFNAME)
     parser.add_argument("--port", type=int, default=LOCAL_PORT)
     parser.add_argument("--thumbs", action="store_true", help="write thumbnails to out/thumbnails")
     parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--login-user", default="admin")
-    parser.add_argument("--login-pass", default="admin")
     parser.add_argument("--login-only", action="store_true", help="perform JSON login and exit")
     parser.add_argument("--json-flow", action="store_true", help="send dev info + media list JSON flow")
-    parser.add_argument("--skip-legacy", action="store_true", help="skip legacy D0 packet sequence")
     args = parser.parse_args()
-
-    ssid = args.ssid
-    pwd = args.pwd
 
     if not args.skip_ble:
         creds = await ble_wake_and_get_creds(args.ble_address)
         ssid = creds["ssid"]
         pwd = creds["pwd"]
 
-    if not ssid or not pwd:
-        raise SystemExit("SSID/PWD not provided. Use --ssid/--pwd or BLE wake.")
+        if not ssid or not pwd:
+            raise SystemExit("SSID/PWD not returned from BLE wake")
 
-    print(f"SSID={ssid}")
-    print("Waiting for SSID to appear in scans...")
-    for t in range(1, 61):
-        nmcli_rescan()
-        ssids = nmcli_list_ssids()
-        if ssid in ssids:
-            print(f"SSID visible after {t}s")
-            break
-        await asyncio.sleep(1)
-    else:
-        raise SystemExit("SSID not visible after 60s")
+        print(f"SSID={ssid}")
+        print("Waiting for SSID to appear in scans...")
+        for t in range(1, 61):
+            nmcli_rescan()
+            ssids = nmcli_list_ssids()
+            if ssid in ssids:
+                print(f"SSID visible after {t}s")
+                break
+            await asyncio.sleep(1)
+        else:
+            raise SystemExit("SSID not visible after 60s")
 
-    print("Connecting to camera Wi-Fi...")
-    if not nmcli_connect(ssid, pwd, args.ifname):
-        raise SystemExit("nmcli connect failed")
+        print("Connecting to camera Wi-Fi...")
+        if not nmcli_connect(ssid, pwd, args.ifname):
+            raise SystemExit("nmcli connect failed")
 
     # wait for DHCP
     for _ in range(30):
@@ -587,7 +579,7 @@ async def main():
         # start keepalive loop
         client.start_keepalive(interval_s=1.0)
 
-        token = login_and_get_token(client, args.login_user, args.login_pass)
+        token = login_and_get_token(client, "admin", "admin")
         if token is None:
             print("Login token not found yet.")
         else:
@@ -665,107 +657,7 @@ async def main():
                         large_chunks.setdefault(seq16, body[4:])
                         client.send_f1(0xD1, make_ack_body_seq16(list(large_chunks.keys())))
 
-        if args.skip_legacy:
-            return
-
-        # send connect-phase D0 packets with timing similar to capture
-        print("Sending connect-phase D0 packets...")
-        schedule = [
-            # (delay_after_s, pkt_index, repeat)
-            (0.0, 0, 1),
-            (0.0, 1, 3),
-            (0.0, 2, 3),
-            (0.0, 3, 3),
-            (2.4, 4, 7),
-            (0.5, 5, 6),
-            (0.0, 6, 1),
-            (0.0, 7, 2),
-            (2.5, 8, 10),
-            (3.0, 9, 1),
-            (3.0, 10, 1),
-            (3.0, 11, 1),
-        ]
-        for delay_s, idx, reps in schedule:
-            if delay_s > 0:
-                pump_incoming(delay_s)
-            pkt = CONNECT_D0_PACKETS[idx]
-            for _ in range(reps):
-                client.send_raw(pkt)
-                time.sleep(0.02)
-            if len(pkt) > 200:
-                time.sleep(0.1)
-
-        # follow with refresh-phase packets to trigger gallery stream
-        print("Sending refresh-phase D0 packets...")
-        refresh_repeats = [10, 10, 3, 3, 3, 1, 1, 1]
-        for pkt, reps in zip(REFRESH_D0_PACKETS, refresh_repeats):
-            for _ in range(reps):
-                client.send_raw(pkt)
-                time.sleep(0.02)
-            pump_incoming(0.3)
-
-        # receive and assemble large D0 stream
-        print("Waiting for gallery stream...")
-        last_recv = time.time()
-        last_ack = 0.0
-        deadline = time.time() + 20.0
-
-        while time.time() < deadline:
-            got = client.recv()
-            now = time.time()
-            if not got:
-                # periodic ACK
-                if large_chunks and (now - last_ack) > 0.15:
-                    client.send_f1(0xD1, make_ack_body_seq16(list(large_chunks.keys())))
-                    last_ack = now
-                # stop if quiet
-                if large_chunks and (now - last_recv) > 2.5:
-                    break
-                continue
-
-            addr, data = got
-            if addr[0] != CAMERA_IP:
-                continue
-            parsed = unpack_f1(data)
-            if not parsed:
-                continue
-            opcode, body, _ = parsed
-
-            if opcode == 0xE0:
-                client.send_f1(0xE1, b"")
-                continue
-
-            if opcode == 0xD0 and len(body) >= 4:
-                last_recv = now
-                if args.debug and len(body) >= 1000:
-                    print("D0 large head:", body[:8].hex())
-                # small chunks (seq8)
-                if body[0] == 0xD1 and body[1] == 0x00:
-                    seq8 = body[3]
-                    small_chunks.setdefault(seq8, body[4:])
-                    if (now - last_ack) > 0.20:
-                        client.send_f1(0xD1, make_ack_body_seq8(list(small_chunks.keys())))
-                        last_ack = now
-                # large chunks (seq16)
-                elif body[0] == 0xD1 and body[1] == 0x04:
-                    seq16 = (body[2] << 8) | body[3]
-                    large_chunks.setdefault(seq16, body[4:])
-                    if (now - last_ack) > 0.10:
-                        client.send_f1(0xD1, make_ack_body_seq16(list(large_chunks.keys())))
-                        last_ack = now
-
-        if not large_chunks:
-            if args.debug:
-                print("No large stream. small_chunks=", len(small_chunks))
-            raise SystemExit("Did not receive large gallery stream")
-
-        seqs = sorted(large_chunks)
-        assembled = b"".join(large_chunks[s] for s in seqs)
-        records = extract_gallery_records(assembled, out_dir="out/thumbnails" if args.thumbs else None)
-
-        print(f"Gallery records: {len(records)}")
-        for record_id, jpeg_len, ver, typ, mac, _jpeg in records:
-            print(f"record_id={record_id} jpeg_len={jpeg_len} ver={ver} typ={typ} mac={mac}")
+        # Legacy D0 packet sequence removed; JSON flow above is the only supported path now.
 
     finally:
         client.close()
