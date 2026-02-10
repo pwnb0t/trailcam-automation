@@ -488,6 +488,7 @@ def send_full_json_flow(
     listen_s: float = 8.0,
     repeats: int = 3,
 ):
+    time.sleep(0.3)
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": per_page, "pageNo": page, "token": token}
 
@@ -516,6 +517,11 @@ def send_full_json_flow(
                 seq8 = body[3]
                 client.send_f1(0xD1, make_ack_body_seq8([seq8]))
                 # show ARTEMIS metadata for visibility
+                for ver, typ, payload in parse_artemis_records(body[4:]):
+                    print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
+            elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
+                seq16 = (body[2] << 8) | body[3]
+                client.send_f1(0xD1, make_ack_body_seq16([seq16]))
                 for ver, typ, payload in parse_artemis_records(body[4:]):
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
 
