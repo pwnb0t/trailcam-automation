@@ -3,6 +3,9 @@ LOCAL_PORT = 16734
 DISCOVERY_PORT = 32108
 WIFI_IFNAME = "wlan0"
 
+CAMERA_USERNAME = "admin"
+CAMERA_PASSWORD = "admin"
+
 # AES command channel (from libArLink.so)
 AES_CMD_KEY = b"xs38nul7cqf7m1va"
 AES_CMD_IV = b"\x00" * 16
