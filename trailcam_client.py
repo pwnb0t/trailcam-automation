@@ -69,6 +69,11 @@ async def main():
         help="Write gallery thumbnails from large D0 stream to out/",
     )
     parser.add_argument(
+        "--dump-artemis",
+        action="store_true",
+        help="Write raw ARTEMIS payloads (media list responses) to out/artemis/",
+    )
+    parser.add_argument(
         "--thumb-offset",
         type=int,
         default=0,
@@ -171,6 +176,7 @@ async def main():
                     dump_thumbs=args.dump_thumbs,
                     thumb_offset=args.thumb_offset,
                     thumb_dir=args.thumb_dir,
+                    dump_artemis=args.dump_artemis,
                 )
 
     finally:

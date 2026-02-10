@@ -9,6 +9,7 @@ from client import TrailCamClient
 from config import CAMERA_IP, WIFI_IFNAME
 from protocol import (
     decrypt_artemis_json,
+    decrypt_cmd_b64,
     make_ack_body_seq16,
     make_ack_body_seq8,
     parse_artemis_records,
@@ -126,6 +127,7 @@ def send_full_json_flow(
     dump_thumbs: bool = False,
     thumb_offset: int = 0,
     thumb_dir: Optional[int] = None,
+    dump_artemis: bool = False,
 ):
     time.sleep(0.3)
     dev_info = {"cmdId": 512, "token": token}
@@ -208,6 +210,15 @@ def send_full_json_flow(
                 client.send_f1(0xD1, make_ack_body_seq8(sorted(seen_seq8)))
                 for ver, typ, payload in parse_artemis_records(body[4:]):
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
+                    if dump_artemis and typ in (4, 36):
+                        out_dir = Path("out") / "artemis"
+                        out_dir.mkdir(parents=True, exist_ok=True)
+                        fname = out_dir / f"rx_ver{ver}_typ{typ}_seq{seq8}.bin"
+                        fname.write_bytes(payload)
+                    if typ in (4, 36):
+                        obj = decrypt_cmd_b64(payload)
+                        if obj:
+                            print("RX JSON media list:", obj)
             elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
                 seq16 = (body[2] << 8) | body[3]
                 seen_seq16.add(seq16)
