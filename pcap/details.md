@@ -25,3 +25,13 @@ Pixels: 5120x2880 (14.7 MP)
 
 Photo is stored in this folder along side trailcam_9 pcap.
 
+
+
+# trailcam_10-connect-thru-download-photo.pcap
+
+Same steps as trailcam_9-connect-thru-download-photo.pcap
+
+Photo downloaded from the app: DSCF0940.JPG
+Stored: /storage/emulated/0/DCIM/TrailCam Go/TrailCam Go-Images/2026-02-11_12.51.46.448_CC164BCE.jpg
+Size: 5.4 MB
+Pixels: 5120x2880 (14.7 MP)
