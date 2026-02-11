@@ -59,6 +59,7 @@ We can now wake the camera, join its AP, authenticate, send JSON commands, recei
 - APK shows `cmdId=1285/1286` for file download, but we haven’t implemented:
   - Request body format
   - Response/stream handling
+  - Need a capture that includes the **actual file transfer** after `cmdId=1285` ACK.
 
 ### 4) Multi‑camera support
 - We now require `--ssid`. For multiple cameras we need:
@@ -81,6 +82,7 @@ We can now wake the camera, join its AP, authenticate, send JSON commands, recei
 - Does the camera ever return a **total count** or a “last item” indicator in `cmdId=768` JSON?
 - Is `cmdId=772` required for the `D1 04` thumbnail stream, or is it triggered by `cmdId=768` alone?
 - Any additional auth/handshake steps needed to guarantee deterministic behavior?
+- What transport carries **full photo/video data** after `cmdId=1285` (seq16 stream? another opcode/port)?
 
 ## Files of Interest
 - `trailcam_client.py` (CLI orchestrator)
@@ -97,6 +99,33 @@ python3 trailcam_client.py --ssid TrailCam_5DBD --json-flow --debug --thumb-offs
 ```
 
 This retrieves the newest media list and thumbnails for the current camera.
+
+## Targeted PCAP Findings (2026-02-10)
+### trailcam_2-3-view-photo.pcap
+- Commands seen:
+  - `cmdId=768` media list request (`pageNo=1`, `itemCntPerPage=45`)
+  - `cmdId=772` thumbs ACKs (responses)
+  - `cmdId=525` heartbeats
+- Data stream:
+  - seq16 stream carries **ARTEMIS ver=8** records (JPEGs with 72‑byte header).
+  - Extracted 45 items: `mediaNum` **347–391** (one full page).
+  - `typ 1..45` maps directly to `mediaNum` (slot index).
+
+### trailcam_2-3-view-photo2.pcap
+- Commands seen:
+  - `cmdId=1285` download request (`fileType=0`, `dirNum=102`, `mediaNum=406`)
+  - `cmdId=525` heartbeats
+- No seq16 stream captured (no file payload observed).
+
+### trailcam_2-3-download-photo.pcap
+- Commands seen:
+  - `cmdId=1285` download request (`fileType=0`, `dirNum=102`, `mediaNum=406`)
+  - `cmdId=525` heartbeats
+- No seq16 stream captured (no file payload observed).
+
+### trailcam_1.pcap (re‑checked)
+- `cmdId=769` and `cmdId=770` present (start/stop playback), and `cmdId=1285` download requests present.
+- Large data stream observed is **only ver=8 thumbnails**; no obvious full photo/video data in this capture.
 
 
 ------
