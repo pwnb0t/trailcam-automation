@@ -13,6 +13,7 @@ from flows import (
     nmcli_connect,
     nmcli_list_ssids,
     nmcli_rescan,
+    send_photo_download_flow,
     send_full_json_flow,
     wifi_has_camera_ip,
 )
@@ -62,6 +63,35 @@ async def main():
         "--json-flow",
         action="store_true",
         help="After login, send dev info (cmdId=512) and media list (cmdId=768)",
+    )
+    parser.add_argument(
+        "--download-photo",
+        action="store_true",
+        help="After login, request a single photo download via cmdId=1285",
+    )
+    parser.add_argument(
+        "--dir-num",
+        type=int,
+        default=None,
+        help="Media directory number for --download-photo (e.g. 102)",
+    )
+    parser.add_argument(
+        "--media-num",
+        type=int,
+        default=None,
+        help="Media number for --download-photo (e.g. 940)",
+    )
+    parser.add_argument(
+        "--download-listen-s",
+        type=float,
+        default=20.0,
+        help="Seconds to listen for download data after cmdId=1285 (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--download-art-typ",
+        type=int,
+        default=7,
+        help="ARTEMIS type to use for cmdId=1285 request (default: %(default)s; app often uses 7)",
     )
     parser.add_argument(
         "--dump-thumbs",
@@ -177,6 +207,19 @@ async def main():
                     thumb_offset=args.thumb_offset,
                     thumb_dir=args.thumb_dir,
                     dump_artemis=args.dump_artemis,
+                    debug=args.debug,
+                )
+            if args.download_photo:
+                if args.dir_num is None or args.media_num is None:
+                    raise SystemExit("--download-photo requires --dir-num and --media-num")
+                send_photo_download_flow(
+                    client,
+                    token,
+                    dir_num=args.dir_num,
+                    media_num=args.media_num,
+                    file_type=0,
+                    art_typ=args.download_art_typ,
+                    listen_s=args.download_listen_s,
                     debug=args.debug,
                 )
 

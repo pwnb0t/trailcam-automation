@@ -270,6 +270,134 @@ def send_full_json_flow(
             (out_dir / f"thumb_{record_id}.jpg").write_bytes(jpeg)
 
 
+def send_photo_download_flow(
+    client: TrailCamClient,
+    token: int,
+    dir_num: int,
+    media_num: int,
+    file_type: int = 0,
+    art_typ: int = 7,
+    listen_s: float = 20.0,
+    dump_dir: str = "out/download",
+    debug: bool = False,
+):
+    """
+    Request a single media file via cmdId=1285 and capture download payloads.
+
+    Notes:
+    - Uses app-like command shape: {"cmdId":1285,"downloadReqs":[...],"token":...}
+    - Uses ARTEMIS type 7 by default (seen in trailcam_10).
+    """
+    req = {
+        "cmdId": 1285,
+        "downloadReqs": [{"fileType": file_type, "dirNum": dir_num, "mediaNum": media_num}],
+        "token": token,
+    }
+
+    out_dir = Path(dump_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    stop_hb = threading.Event()
+
+    def hb_loop():
+        typ = 0x00010001
+        while not stop_hb.is_set():
+            client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
+            typ += 1
+            if typ > 0x00010004:
+                typ = 0x00010001
+            stop_hb.wait(0.7)
+
+    t_hb = threading.Thread(target=hb_loop, daemon=True)
+    t_hb.start()
+
+    print(
+        f"TX JSON: download photo cmdId=1285 fileType={file_type} dirNum={dir_num} mediaNum={media_num} art_typ={art_typ}"
+    )
+    client.send_cmd_json(req, art_ver=2, art_typ=art_typ)
+
+    end = time.time() + listen_s
+    seq8_stream_chunks: List[bytes] = []
+    seq16_chunks: Dict[int, bytes] = {}
+    seen_seq16: set[int] = set()
+    acked_seq8 = 0
+
+    while time.time() < end:
+        got = client.recv()
+        if not got:
+            continue
+        addr, data = got
+        if addr[0] != CAMERA_IP:
+            continue
+        parsed = unpack_f1(data)
+        if not parsed:
+            continue
+        opcode, body, _ = parsed
+        if opcode in (0x41, 0x42):
+            client.send_f1(opcode, body)
+            continue
+        if opcode == 0xE0:
+            client.send_f1(0xE1, b"")
+            continue
+
+        if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+            seq8 = body[3]
+            # ACK each chunk sequence directly; avoids seq8 wrap ambiguity
+            client.send_f1(0xD1, make_ack_body_seq8([seq8]))
+            acked_seq8 += 1
+            chunk = body[4:]
+            seq8_stream_chunks.append(chunk)
+            for ver, typ, payload in parse_artemis_records(chunk):
+                if debug:
+                    print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
+                obj = decrypt_payload_b64_bytes(payload)
+                if obj and debug:
+                    print("RX JSON:", obj)
+            continue
+
+        if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
+            seq16 = (body[2] << 8) | body[3]
+            seen_seq16.add(seq16)
+            client.send_f1(0xD1, make_ack_body_seq16(sorted(seen_seq16)))
+            seq16_chunks[seq16] = body[4:]
+
+    stop_hb.set()
+
+    print(f"Download listen complete: seq8_chunks={len(seq8_stream_chunks)} acked_seq8={acked_seq8}")
+
+    assembled = b"".join(seq8_stream_chunks)
+    (out_dir / "seq8_assembled.bin").write_bytes(assembled)
+
+    records = parse_artemis_records(assembled)
+    print(f"Parsed ARTEMIS records from seq8 stream: {len(records)}")
+
+    found = 0
+    for idx, (ver, typ, payload) in enumerate(records, start=1):
+        # Save all type 6/7 payloads for offline comparison.
+        if typ in (6, 7):
+            found += 1
+            payload_path = out_dir / f"record_{idx:03d}_ver{ver}_typ{typ}_payload.bin"
+            payload_path.write_bytes(payload)
+            soi = payload.find(b"\xff\xd8\xff")
+            eoi = payload.rfind(b"\xff\xd9")
+            if soi != -1 and eoi != -1 and eoi > soi:
+                jpg = payload[soi : eoi + 2]
+                jpg_path = out_dir / f"record_{idx:03d}_ver{ver}_typ{typ}.jpg"
+                jpg_path.write_bytes(jpg)
+                print(f"  extracted {jpg_path} ({len(jpg)} bytes)")
+            elif debug:
+                print(f"  no jpeg markers in record idx={idx} ver={ver} typ={typ}")
+
+    if found == 0:
+        print("No ver/type 6 or 7 records found in seq8 stream")
+
+    if seq16_chunks:
+        assembled16 = b"".join(seq16_chunks[k] for k in sorted(seq16_chunks))
+        (out_dir / "seq16_assembled.bin").write_bytes(assembled16)
+        if debug:
+            print(f"Also captured seq16 stream: chunks={len(seq16_chunks)} bytes={len(assembled16)}")
+
+
 def extract_gallery_records(assembled: bytes, out_dir: Optional[str] = None):
     records = []
     for ver, typ, payload in parse_artemis_records(assembled):
