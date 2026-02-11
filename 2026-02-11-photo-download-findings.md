@@ -81,3 +81,29 @@ Native hints (strings in `libArLink.so`) include:
 3. Avoid any extra swipes or repeated taps.
 4. Ensure capture is not truncated.
 5. Keep exported downloaded file for exact hash/size comparison.
+
+## Update: trailcam_10 (cleaner capture)
+
+Capture: `pcap/trailcam_10-connect-thru-download-photo.pcap`  
+Saved file: `pcap/2026-02-11_12.51.46.448_CC164BCE.jpg` (`5120x2880`, `5391464` bytes)
+
+This capture is not truncated and confirms:
+
+1. Thumbnail request includes newest item:
+   - `cmdId=772` with `mediaNum=940` (dir `102`) down through older items.
+2. File download request is explicit:
+   - `{"cmdId":1285,"downloadReqs":[{"fileType":0,"dirNum":102,"mediaNum":940}],"token":...}`
+3. Camera returns `cmdId=1285` ACK (`cmdRet=0`), then large binary transfers:
+   - `ver=5 type=6 len=988233`
+   - `ver=5 type=7 len=988233`
+
+Observed payload characteristics:
+
+- `ver=5 type=7` contains a valid JPEG (`7680x4320`).
+- `ver=5 type=6` in this run appears partially corrupted/non-decodable as a standalone image.
+- Neither extracted stream image is byte-identical to the app-saved `5120x2880` file.
+
+Conclusion from `trailcam_10`:
+
+- The non-truncated run strengthens confidence in the `1285` control path and binary transfer framing.
+- Remaining gap is now narrower: determine how app derives final `5120x2880` output from these transfer payload(s).

@@ -100,7 +100,6 @@ def login_and_get_token(
     }
     for _ in range(retries):
         client.send_cmd_json(login_obj, art_ver=2, art_typ=1)
-        client.send_cmd_json(login_obj, art_ver=2, art_typ=33)
         deadline = time.time() + timeout_s
         while time.time() < deadline:
             got = client.recv()
@@ -122,7 +121,7 @@ def send_full_json_flow(
     page: int = 0,
     per_page: int = 45,
     listen_s: float = 12.0,
-    repeats: int = 3,
+    repeats: int = 1,
     dump_thumbs: bool = False,
     thumb_offset: int = 0,
     thumb_dir: Optional[int] = None,
@@ -159,7 +158,7 @@ def send_full_json_flow(
             typ += 1
             if typ > 0x00010004:
                 typ = 0x00010001
-            stop_hb.wait(0.3)
+            stop_hb.wait(0.7)
 
     t_hb = threading.Thread(target=hb_loop, daemon=True)
     t_hb.start()
@@ -168,15 +167,12 @@ def send_full_json_flow(
         print(f"TX JSON: dev info (attempt {round_idx}/{repeats})")
         client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
         client.send_cmd_json(dev_info, art_ver=2, art_typ=3)
-        client.send_cmd_json(dev_info, art_ver=2, art_typ=34)
-        client.send_cmd_json(dev_info, art_ver=2, art_typ=35)
         time.sleep(0.05)
         print(f"TX JSON: media list (attempt {round_idx}/{repeats})")
         client.send_cmd_json(media_list, art_ver=2, art_typ=4)
-        client.send_cmd_json(media_list, art_ver=2, art_typ=36)
         if thumb_cmd:
             print(f"TX JSON: thumbs (attempt {round_idx}/{repeats})")
-            client.send_cmd_json(thumb_cmd, art_ver=2, art_typ=37)
+            client.send_cmd_json(thumb_cmd, art_ver=2, art_typ=5)
         time.sleep(0.1)
 
     for i in range(repeats):
@@ -187,11 +183,7 @@ def send_full_json_flow(
     seen_seq8: set[int] = set()
     seen_seq16: set[int] = set()
     end = time.time() + listen_s
-    next_nudge = time.time() + 1.0
     while time.time() < end:
-        if time.time() >= next_nudge:
-            send_dev_media(repeats)
-            next_nudge = time.time() + 1.0
         got = client.recv()
         if not got:
             continue
