@@ -127,6 +127,31 @@ This retrieves the newest media list and thumbnails for the current camera.
 - `cmdId=769` and `cmdId=770` present (start/stop playback), and `cmdId=1285` download requests present.
 - Large data stream observed is **only ver=8 thumbnails**; no obvious full photo/video data in this capture.
 
+### trailcam_8-3-view-and-download-photo.pcap
+- `cmdId=1285` download request present:
+  - `fileType=0`, `dirNum=102`, `mediaNum=936`
+- Data stream **does not** contain a full 7.5MB JPEG (pcap is ~3MB total).
+- `D1 03` stream exists and reassembles into **ARTEMIS ver=5 typ=11/12** payloads.
+  - Payloads contain **JPEG data with 72‑byte header** (MAC + dirNum + mediaNum + size, same header as thumbs).
+  - Extracted JPEG size is ~1.4MB (preview / view‑photo size), not full download.
+
+### trailcam_8-3-view-and-download-video.pcap
+- `cmdId=1285` download request for `mediaNum=934` (fileType=0).
+- `cmdId=769/770` start/stop playback for `mediaNum=935` (fileType=1), sessionNo=37946.
+- Two data streams observed:
+  - **D1 03** → ARTEMIS ver=5 typ=13/14 (JPEGs with 72‑byte header). Likely poster/preview frames.
+  - **D1 02** → ARTEMIS ver=4 typ=1..?? (468 records). This stream is the **video payload**.
+    - Payloads have per‑typ headers (varying length).
+    - After stripping per‑typ headers (most common offsets: typ=3/4/5 → 37 bytes, typ=2/6 → 21 bytes, typ=1 → 67 bytes),
+      concatenation yields a **~6.61MB raw H.264 stream** (matches MP4 size order).
+    - No MP4 container atoms (`ftyp/moov/mdat`) found in stream; likely raw H.264 that the app muxes into MP4.
+    - New finding: ver=4 payloads include a **108‑byte fixed header**; `payload_len` is stored in u32[4] (or u32[5] if u32[4]=0).
+    - For 304 records (matching frame count), the **actual video bytes begin at payload offset 96**.
+    - However, the resulting byte stream still does **not** contain Annex B SPS/PPS start codes.
+      It partially matches the MP4’s AVCC/H.264 data but appears to include extra framing bytes.
+    - Next step: decode the per‑frame payload framing to recover a clean AVCC or Annex‑B stream
+      (so that ffmpeg can mux to MP4).
+
 
 ------
 
