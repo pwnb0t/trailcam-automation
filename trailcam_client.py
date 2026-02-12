@@ -35,11 +35,6 @@ async def main():
         help="Camera AP SSID to connect to (required; e.g. TrailCam_5DBD)",
     )
     parser.add_argument(
-        "--skip-ble",
-        action="store_true",
-        help="Skip BLE wake/credentials. Assumes you are already connected to the camera AP.",
-    )
-    parser.add_argument(
         "--ifname",
         default=WIFI_IFNAME,
         help="Wi-Fi interface to use (default: %(default)s)",
@@ -152,13 +147,15 @@ async def main():
     )
     args = parser.parse_args()
 
-    # If SSID is already visible, skip BLE and connect directly
+    # If already connected to the camera AP, skip BLE wake/connect work.
+    already_connected = False
     nmcli_rescan()
     ssids_now = nmcli_list_ssids()
-    if args.ssid in ssids_now:
-        args.skip_ble = True
+    if args.ssid in ssids_now and wifi_has_camera_ip(args.ifname):
+        already_connected = True
+        print(f"Already connected to camera AP {args.ssid}; skipping BLE wake")
 
-    if not args.skip_ble:
+    if not already_connected:
         creds = await ble_wake_and_get_creds(args.ble_address)
         ssid = creds["ssid"]
         pwd = creds["pwd"]
@@ -189,11 +186,6 @@ async def main():
         print("Connecting to camera Wi-Fi...")
         if not nmcli_connect(ssid, pwd, args.ifname):
             raise SystemExit("nmcli connect failed")
-    else:
-        print(f"Camera AP {args.ssid} already visible; skipping BLE wake")
-        # assume already connected; avoid nmcli without password
-        if not wifi_has_camera_ip(args.ifname):
-            raise SystemExit("AP visible but not connected; connect manually or disable --skip-ble")
 
     for _ in range(30):
         if wifi_has_camera_ip(args.ifname):
