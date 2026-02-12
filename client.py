@@ -17,7 +17,7 @@ class TrailCamClient:
         self.camera_addr: Optional[Tuple[str, int]] = None
         self._stop = threading.Event()
         self._keepalive_thread: Optional[threading.Thread] = None
-        self._seq8 = 0
+        self._ctrl_seq8 = 0
         self.token_int: Optional[int] = None
 
     def close(self):
@@ -86,8 +86,8 @@ class TrailCamClient:
         offset = 0
         while offset < len(art):
             chunk = art[offset : offset + max_chunk]
-            seq = self._seq8 & 0xFF
-            self._seq8 = (self._seq8 + 1) & 0xFF
+            seq = self._ctrl_seq8 & 0xFF
+            self._ctrl_seq8 = (self._ctrl_seq8 + 1) & 0xFF
             body = bytes([0xD1, 0x00, 0x00, seq]) + chunk
             self.send_f1(0xD0, body)
             offset += max_chunk

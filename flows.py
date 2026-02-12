@@ -14,7 +14,7 @@ from protocol import (
     decrypt_payload_b64_bytes,
     make_ack_body_seq16,
     make_ack_body_seq8,
-    make_ack_body_seq8_window,
+    make_ack_body_seq_window16,
     parse_artemis_records,
     parse_artemis_records_strict,
     unpack_f1,
@@ -80,8 +80,8 @@ def handshake_prelude(client: TrailCamClient, debug: bool = False, duration_s: f
         elif opcode == 0xE0:
             client.send_f1(0xE1, b"")
         elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
-            seq8 = body[3]
-            ack = make_ack_body_seq8([seq8])
+            seq0 = (body[2] << 8) | body[3]
+            ack = make_ack_body_seq8([seq0])
             client.send_f1(0xD1, ack)
     if debug:
         print("Handshake opcodes seen:", {hex(k): v for k, v in seen_ops.items()})
@@ -182,8 +182,9 @@ def send_full_json_flow(
         send_dev_media(i + 1)
 
     large_chunks: Dict[int, bytes] = {}
-    seq8_chunks: Dict[int, bytes] = {}
-    seen_seq8: set[int] = set()
+    # subtype 0x00 control-plane stream. We track it as seq16 for consistency (usually hi byte is 0).
+    seq0_chunks: Dict[int, bytes] = {}
+    seen_seq0: set[int] = set()
     seen_seq16: set[int] = set()
     end = time.time() + listen_s
     while time.time() < end:
@@ -201,16 +202,16 @@ def send_full_json_flow(
             elif opcode == 0xE0:
                 client.send_f1(0xE1, b"")
             if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
-                seq8 = body[3]
-                seen_seq8.add(seq8)
-                client.send_f1(0xD1, make_ack_body_seq8(sorted(seen_seq8)))
-                seq8_chunks[seq8] = body[4:]
+                seq0 = (body[2] << 8) | body[3]
+                seen_seq0.add(seq0)
+                client.send_f1(0xD1, make_ack_body_seq8(sorted(seen_seq0)))
+                seq0_chunks[seq0] = body[4:]
                 for ver, typ, payload in parse_artemis_records(body[4:]):
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
                     if dump_artemis and typ in (4, 36):
                         out_dir = Path("out") / "artemis"
                         out_dir.mkdir(parents=True, exist_ok=True)
-                        fname = out_dir / f"rx_ver{ver}_typ{typ}_seq{seq8}.bin"
+                        fname = out_dir / f"rx_ver{ver}_typ{typ}_seq{seq0}.bin"
                         fname.write_bytes(payload)
                     if typ in (4, 36):
                         obj = decrypt_payload_b64_bytes(payload)
@@ -229,9 +230,9 @@ def send_full_json_flow(
     stop_hb.set()
 
     if not large_chunks:
-        # still try to parse seq8 stream for media list JSON
-        if seq8_chunks:
-            assembled_small = b"".join(seq8_chunks[k] for k in sorted(seq8_chunks))
+        # still try to parse seq0 stream for media list JSON
+        if seq0_chunks:
+            assembled_small = b"".join(seq0_chunks[k] for k in sorted(seq0_chunks))
             for ver, typ, payload in parse_artemis_records(assembled_small):
                 if typ in (4, 36):
                     obj = decrypt_payload_b64_bytes(payload)
@@ -239,9 +240,9 @@ def send_full_json_flow(
                         print("RX JSON media list:", obj)
         return
 
-    # parse seq8 stream for media list JSON (multi-chunk)
-    if seq8_chunks:
-        assembled_small = b"".join(seq8_chunks[k] for k in sorted(seq8_chunks))
+    # parse seq0 stream for media list JSON (multi-chunk)
+    if seq0_chunks:
+        assembled_small = b"".join(seq0_chunks[k] for k in sorted(seq0_chunks))
         for ver, typ, payload in parse_artemis_records(assembled_small):
             if typ in (4, 36):
                 obj = decrypt_payload_b64_bytes(payload)
@@ -349,12 +350,12 @@ def send_photo_download_flow(
     end = time.time() + listen_s
     last_seq3_ts: Optional[float] = None
     last_seq4_ts: Optional[float] = None
-    seq8_stream_chunks: List[bytes] = []
+    seq0_stream_chunks: Dict[int, bytes] = {}
     seq3_stream_chunks: Dict[int, bytes] = {}
     seq4_stream_chunks: Dict[int, bytes] = {}
     ack_win_seq3 = deque(maxlen=17)  # holds seq16 values
     ack_win_seq4 = deque(maxlen=17)  # holds seq16 values
-    acked_seq8 = 0
+    acked_seq0 = 0
     acked_seq3 = 0
     acked_seq4 = 0
 
@@ -379,12 +380,12 @@ def send_photo_download_flow(
         if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
             if len(body) > 20:
                 saw_download_data.set()
-            seq8 = body[3]
-            # ACK each chunk sequence directly; avoids seq8 wrap ambiguity
-            client.send_f1(0xD1, make_ack_body_seq8([seq8]))
-            acked_seq8 += 1
+            seq0 = (body[2] << 8) | body[3]
+            # ACK each chunk sequence directly.
+            client.send_f1(0xD1, make_ack_body_seq8([seq0]))
+            acked_seq0 += 1
             chunk = body[4:]
-            seq8_stream_chunks.append(chunk)
+            seq0_stream_chunks[seq0] = chunk
             for ver, typ, payload in parse_artemis_records(chunk):
                 if debug:
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
@@ -398,7 +399,7 @@ def send_photo_download_flow(
             seq16 = (body[2] << 8) | body[3]
             ack_win_seq3.append(seq16)
             # App mostly sends 17-seq ACK windows on channel 0x03.
-            client.send_f1(0xD1, make_ack_body_seq8_window(0x03, list(ack_win_seq3)))
+            client.send_f1(0xD1, make_ack_body_seq_window16(0x03, list(ack_win_seq3)))
             acked_seq3 += 1
             seq3_stream_chunks[seq16] = body[4:]
             last_seq3_ts = time.time()
@@ -409,7 +410,7 @@ def send_photo_download_flow(
             seq16 = (body[2] << 8) | body[3]
             ack_win_seq4.append(seq16)
             # App mostly sends 17-seq ACK windows on channel 0x04.
-            client.send_f1(0xD1, make_ack_body_seq8_window(0x04, list(ack_win_seq4)))
+            client.send_f1(0xD1, make_ack_body_seq_window16(0x04, list(ack_win_seq4)))
             acked_seq4 += 1
             seq4_stream_chunks[seq16] = body[4:]
             last_seq4_ts = time.time()
@@ -431,14 +432,14 @@ def send_photo_download_flow(
     stop_hb.set()
 
     print(
-        f"Download listen complete: seq0_chunks={len(seq8_stream_chunks)} acked_seq0={acked_seq8} "
+        f"Download listen complete: seq0_chunks={len(seq0_stream_chunks)} acked_seq0={acked_seq0} "
         f"seq3_chunks={len(seq3_stream_chunks)} acked_seq3={acked_seq3} "
         f"seq4_chunks={len(seq4_stream_chunks)} acked_seq4={acked_seq4} "
         f"hb_sent={hb_sent} req1285_sent={dl_req_sent}"
     )
 
-    assembled = b"".join(seq8_stream_chunks)
-    (out_dir / "seq8_assembled.bin").write_bytes(assembled)
+    assembled0 = b"".join(seq0_stream_chunks[k] for k in sorted(seq0_stream_chunks))
+    (out_dir / "seq0_assembled.bin").write_bytes(assembled0)
     assembled3 = b"".join(seq3_stream_chunks[k] for k in sorted(seq3_stream_chunks))
     assembled4 = b"".join(seq4_stream_chunks[k] for k in sorted(seq4_stream_chunks))
     if assembled3:
@@ -446,8 +447,8 @@ def send_photo_download_flow(
     if assembled4:
         (out_dir / "seq4_assembled.bin").write_bytes(assembled4)
 
-    records = parse_artemis_records(assembled)
-    print(f"Parsed ARTEMIS records from seq8 stream: {len(records)}")
+    records = parse_artemis_records(assembled0)
+    print(f"Parsed ARTEMIS records from seq0 stream: {len(records)}")
 
     found = 0
     for idx, (ver, typ, payload) in enumerate(records, start=1):
@@ -534,10 +535,10 @@ def send_photo_download_flow(
         print("  no ARTEMIS-record JPEGs extracted from seq3/seq4")
 
     return {
-        "seq0_chunks": len(seq8_stream_chunks),
+        "seq0_chunks": len(seq0_stream_chunks),
         "seq3_chunks": len(seq3_stream_chunks),
         "seq4_chunks": len(seq4_stream_chunks),
-        "acked_seq0": acked_seq8,
+        "acked_seq0": acked_seq0,
         "acked_seq3": acked_seq3,
         "acked_seq4": acked_seq4,
         "hb_sent": hb_sent,
@@ -615,7 +616,7 @@ def fetch_media_list_page(
 
     try:
         for attempt in range(1, retries + 1):
-            seq0_fragments: List[bytes] = []
+            seq0_fragments: Dict[int, bytes] = {}
             if debug:
                 print(f"TX JSON: dev info (attempt {attempt}/{retries})")
             client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
@@ -644,10 +645,10 @@ def fetch_media_list_page(
                     elif opcode == 0xE0:
                         client.send_f1(0xE1, b"")
                     elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
-                        seq = body[3]
-                        client.send_f1(0xD1, make_ack_body_seq8([seq]))
+                        seq0 = (body[2] << 8) | body[3]
+                        client.send_f1(0xD1, make_ack_body_seq8([seq0]))
                         chunk = body[4:]
-                        seq0_fragments.append(chunk)
+                        seq0_fragments[seq0] = chunk
                         for ver, typ, payload in parse_artemis_records(chunk):
                             if typ not in (4, 36):
                                 continue
@@ -683,7 +684,7 @@ def fetch_media_list_page(
                         seen_keys.add(key)
                         entries.append(ent)
             if seq0_fragments:
-                assembled_seq0 = b"".join(seq0_fragments)
+                assembled_seq0 = b"".join(seq0_fragments[k] for k in sorted(seq0_fragments))
                 for ver, typ, payload in parse_artemis_records(assembled_seq0):
                     if typ not in (4, 36):
                         continue

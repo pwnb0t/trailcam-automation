@@ -27,10 +27,15 @@ def make_ack_body_seq8_with_subtype(subtype: int, seqs8: List[int]) -> bytes:
     return bytes([0xD1, subtype & 0xFF, 0x00, count]) + seq16
 
 
-def make_ack_body_seq8_window(subtype: int, seqs8_ordered: List[int]) -> bytes:
-    count = min(len(seqs8_ordered), 0xFF)
-    seq16 = b"".join(struct.pack(">H", s & 0xFFFF) for s in seqs8_ordered[-count:])
+def make_ack_body_seq_window16(subtype: int, seqs16_ordered: List[int]) -> bytes:
+    count = min(len(seqs16_ordered), 0xFF)
+    seq16 = b"".join(struct.pack(">H", s & 0xFFFF) for s in seqs16_ordered[-count:])
     return bytes([0xD1, subtype & 0xFF, 0x00, count]) + seq16
+
+
+# Backward-compatible alias (older name was misleading: it always packed 16-bit values).
+def make_ack_body_seq8_window(subtype: int, seqs8_ordered: List[int]) -> bytes:
+    return make_ack_body_seq_window16(subtype, seqs8_ordered)
 
 
 def make_ack_body_seq8(seqs8: List[int]) -> bytes:
