@@ -8,6 +8,7 @@ from client import TrailCamClient
 from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
 from ble import ble_wake_and_get_creds
 from flows import (
+    download_photo_page,
     handshake_prelude,
     login_and_get_token,
     nmcli_connect,
@@ -68,6 +69,34 @@ async def main():
         "--download-photo",
         action="store_true",
         help="After login, request a single photo download via cmdId=1285",
+    )
+    parser.add_argument(
+        "--download-page",
+        action="store_true",
+        help="After login, fetch one media-list page and download the newest photo entries",
+    )
+    parser.add_argument(
+        "--page-no",
+        type=int,
+        default=0,
+        help="Media list page number for --download-page (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--page-item-cnt",
+        type=int,
+        default=45,
+        help="Items per media-list page request (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--page-download-limit",
+        type=int,
+        default=12,
+        help="Maximum photos to download from fetched page (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--media-out-dir",
+        default="out/media",
+        help="Output directory root for --download-page results (default: %(default)s)",
     )
     parser.add_argument(
         "--dir-num",
@@ -229,6 +258,25 @@ async def main():
                     idle_break_s=args.download_idle_s,
                     debug=args.debug,
                 )
+            if args.download_page:
+                results = download_photo_page(
+                    client,
+                    token,
+                    page_no=args.page_no,
+                    item_cnt_per_page=args.page_item_cnt,
+                    limit=args.page_download_limit,
+                    out_root=args.media_out_dir,
+                    art_typ=args.download_art_typ,
+                    listen_s=args.download_listen_s,
+                    idle_break_s=args.download_idle_s,
+                    debug=args.debug,
+                )
+                print(f"Downloaded page results: {len(results)} item(s)")
+                for r in results:
+                    print(
+                        f"  dir={r['dirNum']} media={r['mediaNum']} "
+                        f"jpeg={r['best_jpeg'] or 'none'} out={r['dump_dir']}"
+                    )
 
     finally:
         client.close()

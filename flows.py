@@ -4,7 +4,7 @@ import threading
 import time
 from collections import deque
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from client import TrailCamClient
 from constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
@@ -488,6 +488,213 @@ def send_photo_download_flow(
 
     if carved == 0 and (assembled3 or assembled4):
         print("No JPEG carved yet from seq3/seq4 channels")
+
+    return {
+        "seq0_chunks": len(seq8_stream_chunks),
+        "seq3_chunks": len(seq3_stream_chunks),
+        "seq4_chunks": len(seq4_stream_chunks),
+        "acked_seq0": acked_seq8,
+        "acked_seq3": acked_seq3,
+        "acked_seq4": acked_seq4,
+        "hb_sent": hb_sent,
+        "req1285_sent": dl_req_sent,
+        "dump_dir": str(out_dir),
+        "best_jpeg": str(out_dir / "seq3_carved_best.jpg")
+        if (out_dir / "seq3_carved_best.jpg").exists()
+        else (str(out_dir / "seq4_carved_best.jpg") if (out_dir / "seq4_carved_best.jpg").exists() else None),
+    }
+
+
+def _collect_media_entries(node: Any, out: List[Dict[str, Any]]) -> None:
+    if isinstance(node, dict):
+        if "dirNum" in node and "mediaNum" in node:
+            out.append(node)
+        for v in node.values():
+            _collect_media_entries(v, out)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_media_entries(item, out)
+
+
+def _is_photo_entry(entry: Dict[str, Any]) -> bool:
+    file_type = entry.get("fileType")
+    if isinstance(file_type, int):
+        return file_type == 0
+    if isinstance(file_type, str) and file_type.isdigit():
+        return int(file_type) == 0
+
+    media_type = str(entry.get("mediaType", "")).upper()
+    if "PHOTO" in media_type or media_type in {"0", "IMAGE", "JPG", "JPEG"}:
+        return True
+
+    name = str(entry.get("fileName") or entry.get("name") or "").upper()
+    if name.endswith(".JPG") or name.endswith(".JPEG"):
+        return True
+    if name.endswith(".MP4") or name.endswith(".AVI"):
+        return False
+
+    # If unknown, assume photo; caller can inspect results.
+    return True
+
+
+def fetch_media_list_page(
+    client: TrailCamClient,
+    token: int,
+    page_no: int = 0,
+    item_cnt_per_page: int = 45,
+    retries: int = 3,
+    timeout_s: float = 8.0,
+    debug: bool = False,
+) -> List[Dict[str, Any]]:
+    dev_info = {"cmdId": 512, "token": token}
+    media_list = {"cmdId": 768, "itemCntPerPage": item_cnt_per_page, "pageNo": page_no, "token": token}
+
+    entries: List[Dict[str, Any]] = []
+    seen_keys: set[tuple[int, int]] = set()
+    stop_hb = threading.Event()
+
+    def hb_loop():
+        typ = 0x00010001
+        while not stop_hb.is_set():
+            client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
+            typ += 1
+            if typ > 0x00010004:
+                typ = 0x00010001
+            stop_hb.wait(0.7)
+
+    t_hb = threading.Thread(target=hb_loop, daemon=True)
+    t_hb.start()
+
+    try:
+        for attempt in range(1, retries + 1):
+            if debug:
+                print(f"TX JSON: dev info (attempt {attempt}/{retries})")
+            client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
+            client.send_cmd_json(dev_info, art_ver=2, art_typ=3)
+            time.sleep(0.05)
+            if debug:
+                print(f"TX JSON: media list page={page_no} count={item_cnt_per_page} (attempt {attempt}/{retries})")
+            client.send_cmd_json(media_list, art_ver=2, art_typ=4)
+
+            deadline = time.time() + timeout_s
+            while time.time() < deadline:
+                got = client.recv()
+                if not got:
+                    continue
+                addr, data = got
+                if addr[0] != CAMERA_IP:
+                    continue
+                parsed = unpack_f1(data)
+                if parsed:
+                    opcode, body, _ = parsed
+                    if opcode in (0x41, 0x42):
+                        client.send_f1(opcode, body)
+                    elif opcode == 0xE0:
+                        client.send_f1(0xE1, b"")
+                    elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+                        seq = body[3]
+                        client.send_f1(0xD1, make_ack_body_seq8([seq]))
+                        for ver, typ, payload in parse_artemis_records(body[4:]):
+                            if typ not in (4, 36):
+                                continue
+                            obj = decrypt_payload_b64_bytes(payload)
+                            if not obj:
+                                continue
+                            if debug:
+                                print("RX JSON media list:", obj)
+                            found: List[Dict[str, Any]] = []
+                            _collect_media_entries(obj, found)
+                            for ent in found:
+                                try:
+                                    key = (int(ent.get("dirNum")), int(ent.get("mediaNum")))
+                                except Exception:
+                                    continue
+                                if key in seen_keys:
+                                    continue
+                                seen_keys.add(key)
+                                entries.append(ent)
+                for obj in client.handle_incoming_payload(data):
+                    # Some responses may arrive via generic JSON path.
+                    found: List[Dict[str, Any]] = []
+                    _collect_media_entries(obj, found)
+                    for ent in found:
+                        try:
+                            key = (int(ent.get("dirNum")), int(ent.get("mediaNum")))
+                        except Exception:
+                            continue
+                        if key in seen_keys:
+                            continue
+                        seen_keys.add(key)
+                        entries.append(ent)
+
+            if entries:
+                break
+    finally:
+        stop_hb.set()
+
+    return entries
+
+
+def download_photo_page(
+    client: TrailCamClient,
+    token: int,
+    page_no: int = 0,
+    item_cnt_per_page: int = 45,
+    limit: int = 12,
+    out_root: str = "out/media",
+    art_typ: int = 7,
+    listen_s: float = 45.0,
+    idle_break_s: float = 4.0,
+    debug: bool = False,
+) -> List[Dict[str, Any]]:
+    entries = fetch_media_list_page(
+        client,
+        token,
+        page_no=page_no,
+        item_cnt_per_page=item_cnt_per_page,
+        debug=debug,
+    )
+    if not entries:
+        print("No media entries found on requested page.")
+        return []
+
+    photos = [e for e in entries if _is_photo_entry(e)]
+    # Preserve camera order (typically newest-first) and cap by limit.
+    photos = photos[:limit]
+    if not photos:
+        print("No photo entries found on requested page.")
+        return []
+
+    results: List[Dict[str, Any]] = []
+    root = Path(out_root)
+    root.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading {len(photos)} photo(s) from page {page_no} into {root} ...")
+    for idx, entry in enumerate(photos, start=1):
+        dir_num = int(entry.get("dirNum"))
+        media_num = int(entry.get("mediaNum"))
+        media_dir = root / f"{dir_num}_{media_num}"
+        print(f"[{idx}/{len(photos)}] dir={dir_num} media={media_num}")
+        res = send_photo_download_flow(
+            client,
+            token,
+            dir_num=dir_num,
+            media_num=media_num,
+            file_type=0,
+            art_typ=art_typ,
+            listen_s=listen_s,
+            idle_break_s=idle_break_s,
+            dump_dir=str(media_dir),
+            debug=debug,
+        )
+        results.append(
+            {
+                "dirNum": dir_num,
+                "mediaNum": media_num,
+                "best_jpeg": res.get("best_jpeg"),
+                "dump_dir": res.get("dump_dir"),
+            }
+        )
+    return results
 
 
 def extract_gallery_records(assembled: bytes, out_dir: Optional[str] = None):
