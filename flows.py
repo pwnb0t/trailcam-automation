@@ -2,6 +2,7 @@ import os
 import subprocess
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -13,6 +14,7 @@ from protocol import (
     decrypt_payload_b64_bytes,
     make_ack_body_seq16,
     make_ack_body_seq8,
+    make_ack_body_seq8_window,
     parse_artemis_records,
     unpack_f1,
 )
@@ -277,7 +279,8 @@ def send_photo_download_flow(
     media_num: int,
     file_type: int = 0,
     art_typ: int = 7,
-    listen_s: float = 20.0,
+    listen_s: float = 45.0,
+    idle_break_s: float = 4.0,
     dump_dir: str = "out/download",
     debug: bool = False,
 ):
@@ -298,29 +301,61 @@ def send_photo_download_flow(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     stop_hb = threading.Event()
+    saw_download_data = threading.Event()
+    hb_sent = 0
+    dl_req_sent = 0
+
+    def send_download_req():
+        nonlocal dl_req_sent
+        client.send_cmd_json(req, art_ver=2, art_typ=art_typ)
+        dl_req_sent += 1
 
     def hb_loop():
+        nonlocal hb_sent
+        # App captures show cmdId=525 sent in bursts every ~3s during download.
         typ = 0x00010001
         while not stop_hb.is_set():
-            client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
-            typ += 1
-            if typ > 0x00010004:
-                typ = 0x00010001
-            stop_hb.wait(0.7)
+            burst = 2 if not saw_download_data.is_set() else 10
+            for _ in range(burst):
+                client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
+                hb_sent += 1
+                typ += 1
+                if typ > 0x00010004:
+                    typ = 0x00010001
+                if stop_hb.wait(0.012):
+                    return
+            if stop_hb.wait(3.0):
+                return
 
-    t_hb = threading.Thread(target=hb_loop, daemon=True)
-    t_hb.start()
+    def req_resend_loop():
+        # App captures show an immediate double-send of cmdId=1285, then a later resend.
+        if stop_hb.wait(0.02):
+            return
+        send_download_req()
+        if stop_hb.wait(7.5):
+            return
+        send_download_req()
 
     print(
         f"TX JSON: download photo cmdId=1285 fileType={file_type} dirNum={dir_num} mediaNum={media_num} art_typ={art_typ}"
     )
-    client.send_cmd_json(req, art_ver=2, art_typ=art_typ)
+    send_download_req()
+    t_hb = threading.Thread(target=hb_loop, daemon=True)
+    t_req = threading.Thread(target=req_resend_loop, daemon=True)
+    t_hb.start()
+    t_req.start()
 
     end = time.time() + listen_s
+    last_seq3_ts: Optional[float] = None
+    last_seq4_ts: Optional[float] = None
     seq8_stream_chunks: List[bytes] = []
-    seq16_chunks: Dict[int, bytes] = {}
-    seen_seq16: set[int] = set()
+    seq3_stream_chunks: List[bytes] = []
+    seq4_stream_chunks: List[bytes] = []
+    ack_win_seq3 = deque(maxlen=17)
+    ack_win_seq4 = deque(maxlen=17)
     acked_seq8 = 0
+    acked_seq3 = 0
+    acked_seq4 = 0
 
     while time.time() < end:
         got = client.recv()
@@ -341,6 +376,8 @@ def send_photo_download_flow(
             continue
 
         if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+            if len(body) > 20:
+                saw_download_data.set()
             seq8 = body[3]
             # ACK each chunk sequence directly; avoids seq8 wrap ambiguity
             client.send_f1(0xD1, make_ack_body_seq8([seq8]))
@@ -355,18 +392,52 @@ def send_photo_download_flow(
                     print("RX JSON:", obj)
             continue
 
+        if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x03:
+            saw_download_data.set()
+            seq = body[3]
+            ack_win_seq3.append(seq)
+            # App mostly sends 17-seq ACK windows on channel 0x03.
+            client.send_f1(0xD1, make_ack_body_seq8_window(0x03, list(ack_win_seq3)))
+            acked_seq3 += 1
+            seq3_stream_chunks.append(body[4:])
+            last_seq3_ts = time.time()
+            continue
+
         if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
-            seq16 = (body[2] << 8) | body[3]
-            seen_seq16.add(seq16)
-            client.send_f1(0xD1, make_ack_body_seq16(sorted(seen_seq16)))
-            seq16_chunks[seq16] = body[4:]
+            saw_download_data.set()
+            seq = body[3]
+            ack_win_seq4.append(seq)
+            # App mostly sends 17-seq ACK windows on channel 0x04.
+            client.send_f1(0xD1, make_ack_body_seq8_window(0x04, list(ack_win_seq4)))
+            acked_seq4 += 1
+            seq4_stream_chunks.append(body[4:])
+            last_seq4_ts = time.time()
+            continue
+
+        # If data channels have gone quiet after starting transfer, stop early.
+        now = time.time()
+        quiet3 = last_seq3_ts is not None and (now - last_seq3_ts) >= idle_break_s
+        quiet4 = last_seq4_ts is not None and (now - last_seq4_ts) >= idle_break_s
+        if (last_seq3_ts is not None or last_seq4_ts is not None) and (quiet3 or quiet4):
+            break
 
     stop_hb.set()
 
-    print(f"Download listen complete: seq8_chunks={len(seq8_stream_chunks)} acked_seq8={acked_seq8}")
+    print(
+        f"Download listen complete: seq0_chunks={len(seq8_stream_chunks)} acked_seq0={acked_seq8} "
+        f"seq3_chunks={len(seq3_stream_chunks)} acked_seq3={acked_seq3} "
+        f"seq4_chunks={len(seq4_stream_chunks)} acked_seq4={acked_seq4} "
+        f"hb_sent={hb_sent} req1285_sent={dl_req_sent}"
+    )
 
     assembled = b"".join(seq8_stream_chunks)
     (out_dir / "seq8_assembled.bin").write_bytes(assembled)
+    assembled3 = b"".join(seq3_stream_chunks)
+    assembled4 = b"".join(seq4_stream_chunks)
+    if assembled3:
+        (out_dir / "seq3_assembled.bin").write_bytes(assembled3)
+    if assembled4:
+        (out_dir / "seq4_assembled.bin").write_bytes(assembled4)
 
     records = parse_artemis_records(assembled)
     print(f"Parsed ARTEMIS records from seq8 stream: {len(records)}")
@@ -391,11 +462,32 @@ def send_photo_download_flow(
     if found == 0:
         print("No ver/type 6 or 7 records found in seq8 stream")
 
-    if seq16_chunks:
-        assembled16 = b"".join(seq16_chunks[k] for k in sorted(seq16_chunks))
-        (out_dir / "seq16_assembled.bin").write_bytes(assembled16)
-        if debug:
-            print(f"Also captured seq16 stream: chunks={len(seq16_chunks)} bytes={len(assembled16)}")
+    # Try direct JPEG carving from data channels used in app photo/video transfer.
+    carved = 0
+    for label, blob in (("seq3", assembled3), ("seq4", assembled4)):
+        if not blob:
+            continue
+        soi = blob.find(b"\xff\xd8\xff")
+        eoi = blob.rfind(b"\xff\xd9")
+        if soi != -1 and eoi != -1 and eoi > soi:
+            # Wide-span candidate: first SOI to last EOI
+            jpg = blob[soi : eoi + 2]
+            out_path = out_dir / f"{label}_carved_best.jpg"
+            out_path.write_bytes(jpg)
+            carved += 1
+            print(f"  carved JPEG from {label}: {out_path} ({len(jpg)} bytes)")
+
+            # Also emit nearest-EOI candidate for debugging.
+            near_eoi = blob.find(b"\xff\xd9", soi + 3)
+            if near_eoi != -1 and near_eoi + 2 < len(jpg):
+                near = blob[soi : near_eoi + 2]
+                near_path = out_dir / f"{label}_carved_nearest.jpg"
+                near_path.write_bytes(near)
+        elif debug:
+            print(f"  no JPEG markers in {label} channel ({len(blob)} bytes)")
+
+    if carved == 0 and (assembled3 or assembled4):
+        print("No JPEG carved yet from seq3/seq4 channels")
 
 
 def extract_gallery_records(assembled: bytes, out_dir: Optional[str] = None):

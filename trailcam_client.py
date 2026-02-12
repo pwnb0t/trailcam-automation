@@ -84,8 +84,14 @@ async def main():
     parser.add_argument(
         "--download-listen-s",
         type=float,
-        default=20.0,
+        default=45.0,
         help="Seconds to listen for download data after cmdId=1285 (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--download-idle-s",
+        type=float,
+        default=4.0,
+        help="Stop download capture after this many seconds of data-channel idle time (default: %(default)s)",
     )
     parser.add_argument(
         "--download-art-typ",
@@ -220,6 +226,7 @@ async def main():
                     file_type=0,
                     art_typ=args.download_art_typ,
                     listen_s=args.download_listen_s,
+                    idle_break_s=args.download_idle_s,
                     debug=args.debug,
                 )
 

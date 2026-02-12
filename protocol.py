@@ -20,11 +20,21 @@ def unpack_f1(pkt: bytes) -> Optional[Tuple[int, bytes, int]]:
     return opcode, body, blen
 
 
-def make_ack_body_seq8(seqs8: List[int]) -> bytes:
+def make_ack_body_seq8_with_subtype(subtype: int, seqs8: List[int]) -> bytes:
     seqs = sorted(set(seqs8))
     count = len(seqs) & 0xFF
     seq16 = b"".join(struct.pack(">H", s) for s in seqs)
-    return bytes([0xD1, 0x00, 0x00, count]) + seq16
+    return bytes([0xD1, subtype & 0xFF, 0x00, count]) + seq16
+
+
+def make_ack_body_seq8_window(subtype: int, seqs8_ordered: List[int]) -> bytes:
+    count = min(len(seqs8_ordered), 0xFF)
+    seq16 = b"".join(struct.pack(">H", s & 0xFFFF) for s in seqs8_ordered[-count:])
+    return bytes([0xD1, subtype & 0xFF, 0x00, count]) + seq16
+
+
+def make_ack_body_seq8(seqs8: List[int]) -> bytes:
+    return make_ack_body_seq8_with_subtype(0x00, seqs8)
 
 
 def make_ack_body_seq16(seqs16: List[int]) -> bytes:
