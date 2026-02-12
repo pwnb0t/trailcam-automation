@@ -350,10 +350,10 @@ def send_photo_download_flow(
     last_seq3_ts: Optional[float] = None
     last_seq4_ts: Optional[float] = None
     seq8_stream_chunks: List[bytes] = []
-    seq3_stream_chunks: List[bytes] = []
-    seq4_stream_chunks: List[bytes] = []
-    ack_win_seq3 = deque(maxlen=17)
-    ack_win_seq4 = deque(maxlen=17)
+    seq3_stream_chunks: Dict[int, bytes] = {}
+    seq4_stream_chunks: Dict[int, bytes] = {}
+    ack_win_seq3 = deque(maxlen=17)  # holds seq16 values
+    ack_win_seq4 = deque(maxlen=17)  # holds seq16 values
     acked_seq8 = 0
     acked_seq3 = 0
     acked_seq4 = 0
@@ -395,23 +395,23 @@ def send_photo_download_flow(
 
         if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x03:
             saw_download_data.set()
-            seq = body[3]
-            ack_win_seq3.append(seq)
+            seq16 = (body[2] << 8) | body[3]
+            ack_win_seq3.append(seq16)
             # App mostly sends 17-seq ACK windows on channel 0x03.
             client.send_f1(0xD1, make_ack_body_seq8_window(0x03, list(ack_win_seq3)))
             acked_seq3 += 1
-            seq3_stream_chunks.append(body[4:])
+            seq3_stream_chunks[seq16] = body[4:]
             last_seq3_ts = time.time()
             continue
 
         if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
             saw_download_data.set()
-            seq = body[3]
-            ack_win_seq4.append(seq)
+            seq16 = (body[2] << 8) | body[3]
+            ack_win_seq4.append(seq16)
             # App mostly sends 17-seq ACK windows on channel 0x04.
             client.send_f1(0xD1, make_ack_body_seq8_window(0x04, list(ack_win_seq4)))
             acked_seq4 += 1
-            seq4_stream_chunks.append(body[4:])
+            seq4_stream_chunks[seq16] = body[4:]
             last_seq4_ts = time.time()
             continue
 
@@ -439,8 +439,8 @@ def send_photo_download_flow(
 
     assembled = b"".join(seq8_stream_chunks)
     (out_dir / "seq8_assembled.bin").write_bytes(assembled)
-    assembled3 = b"".join(seq3_stream_chunks)
-    assembled4 = b"".join(seq4_stream_chunks)
+    assembled3 = b"".join(seq3_stream_chunks[k] for k in sorted(seq3_stream_chunks))
+    assembled4 = b"".join(seq4_stream_chunks[k] for k in sorted(seq4_stream_chunks))
     if assembled3:
         (out_dir / "seq3_assembled.bin").write_bytes(assembled3)
     if assembled4:
@@ -499,10 +499,15 @@ def send_photo_download_flow(
             soi = data.find(b"\xff\xd8\xff")
             if soi == -1:
                 continue
-            eoi = data.rfind(b"\xff\xd9")
+            # Prefer the last EOI within this record, but cap at the declared dataLen when present.
+            cap_end = len(data)
+            if h and h.get("dataLen"):
+                cap_end = min(cap_end, int(h["dataLen"]))
+            search = data[:cap_end]
+            eoi = search.rfind(b"\xff\xd9")
             if eoi == -1 or eoi <= soi:
                 continue
-            jpg = data[soi : eoi + 2]
+            jpg = search[soi : eoi + 2]
             p = out_dir / f"{label}_record_{idx:03d}_ver{ver}_typ{typ}_{len(jpg)}.jpg"
             p.write_bytes(jpg)
             out_paths.append(p)
@@ -514,11 +519,12 @@ def send_photo_download_flow(
 
     best_path: Optional[Path] = None
     if extracted:
-        # Prefer typ=7 if present, otherwise largest file.
+        # Choose the largest candidate for this file. The stream can include small previews too.
+        # If there are multiple large candidates, prefer typ=7 (observed for full payload) as a tie-breaker.
         def score(p: Path) -> tuple[int, int]:
             name = p.name
             typ7 = 1 if "_typ7_" in name else 0
-            return (typ7, p.stat().st_size)
+            return (p.stat().st_size, typ7)
 
         best_path = sorted(extracted, key=score, reverse=True)[0]
         final_path = out_dir / "download.jpg"

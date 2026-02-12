@@ -10,7 +10,11 @@ from constants import CHAR_NOTIFY, CHAR_WRITE, WAKE_PAYLOAD
 async def ble_wake_and_get_creds(address: str) -> Dict[str, str]:
     creds = {"ssid": None, "pwd": None}
 
-    async with BleakClient(address) as client:
+    # Bleak/BlueZ on some systems intermittently throws DBus EOFError during
+    # disconnect/__aexit__. Treat it as non-fatal once we already got creds.
+    client = BleakClient(address)
+    try:
+        await client.connect()
         buf = bytearray()
 
         def on_notify(_, data: bytearray):
@@ -40,6 +44,15 @@ async def ble_wake_and_get_creds(address: str) -> Dict[str, str]:
         try:
             await client.stop_notify(CHAR_NOTIFY)
         except Exception:
+            pass
+    finally:
+        try:
+            await client.disconnect()
+        except EOFError:
+            # Common failure mode observed on Pi; ignore.
+            pass
+        except Exception:
+            # Don't let cleanup prevent the caller from proceeding.
             pass
 
     if not creds["ssid"] or not creds["pwd"]:
