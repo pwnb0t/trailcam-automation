@@ -16,6 +16,7 @@ from protocol import (
     make_ack_body_seq8,
     make_ack_body_seq8_window,
     parse_artemis_records,
+    parse_artemis_records_strict,
     unpack_f1,
 )
 from seed import get_seed_thumbnail_reqs
@@ -415,11 +416,17 @@ def send_photo_download_flow(
             continue
 
         # If data channels have gone quiet after starting transfer, stop early.
+        # Only break once *all* channels that have started are quiet, otherwise we truncate.
         now = time.time()
-        quiet3 = last_seq3_ts is not None and (now - last_seq3_ts) >= idle_break_s
-        quiet4 = last_seq4_ts is not None and (now - last_seq4_ts) >= idle_break_s
-        if (last_seq3_ts is not None or last_seq4_ts is not None) and (quiet3 or quiet4):
-            break
+        started = last_seq3_ts is not None or last_seq4_ts is not None
+        if started:
+            quiet_ok = True
+            if last_seq3_ts is not None:
+                quiet_ok = quiet_ok and ((now - last_seq3_ts) >= idle_break_s)
+            if last_seq4_ts is not None:
+                quiet_ok = quiet_ok and ((now - last_seq4_ts) >= idle_break_s)
+            if quiet_ok:
+                break
 
     stop_hb.set()
 
@@ -462,32 +469,63 @@ def send_photo_download_flow(
     if found == 0:
         print("No ver/type 6 or 7 records found in seq8 stream")
 
-    # Try direct JPEG carving from data channels used in app photo/video transfer.
-    carved = 0
-    for label, blob in (("seq3", assembled3), ("seq4", assembled4)):
+    def parse_transfer_header72(payload: bytes) -> Optional[Dict[str, int]]:
+        if len(payload) < 72:
+            return None
+        try:
+            return {
+                "dirNum": int.from_bytes(payload[0x20:0x22], "little"),
+                "mediaNum": int.from_bytes(payload[0x22:0x24], "little"),
+                "dataLen": int.from_bytes(payload[0x24:0x28], "little"),
+                "mediaId": int.from_bytes(payload[0x30:0x34], "little"),
+            }
+        except Exception:
+            return None
+
+    def extract_jpegs_from_artemis_stream(label: str, blob: bytes) -> List[Path]:
         if not blob:
-            continue
-        soi = blob.find(b"\xff\xd8\xff")
-        eoi = blob.rfind(b"\xff\xd9")
-        if soi != -1 and eoi != -1 and eoi > soi:
-            # Wide-span candidate: first SOI to last EOI
-            jpg = blob[soi : eoi + 2]
-            out_path = out_dir / f"{label}_carved_best.jpg"
-            out_path.write_bytes(jpg)
-            carved += 1
-            print(f"  carved JPEG from {label}: {out_path} ({len(jpg)} bytes)")
+            return []
+        recs = parse_artemis_records_strict(blob)
+        if not recs:
+            return []
+        out_paths: List[Path] = []
+        for idx, (ver, typ, payload) in enumerate(recs, start=1):
+            h = parse_transfer_header72(payload)
+            if h and (h["dirNum"] != dir_num or h["mediaNum"] != media_num):
+                continue
+            if len(payload) < 72:
+                continue
+            data = payload[72:]
+            soi = data.find(b"\xff\xd8\xff")
+            if soi == -1:
+                continue
+            eoi = data.rfind(b"\xff\xd9")
+            if eoi == -1 or eoi <= soi:
+                continue
+            jpg = data[soi : eoi + 2]
+            p = out_dir / f"{label}_record_{idx:03d}_ver{ver}_typ{typ}_{len(jpg)}.jpg"
+            p.write_bytes(jpg)
+            out_paths.append(p)
+        return out_paths
 
-            # Also emit nearest-EOI candidate for debugging.
-            near_eoi = blob.find(b"\xff\xd9", soi + 3)
-            if near_eoi != -1 and near_eoi + 2 < len(jpg):
-                near = blob[soi : near_eoi + 2]
-                near_path = out_dir / f"{label}_carved_nearest.jpg"
-                near_path.write_bytes(near)
-        elif debug:
-            print(f"  no JPEG markers in {label} channel ({len(blob)} bytes)")
+    extracted: List[Path] = []
+    extracted += extract_jpegs_from_artemis_stream("seq3", assembled3)
+    extracted += extract_jpegs_from_artemis_stream("seq4", assembled4)
 
-    if carved == 0 and (assembled3 or assembled4):
-        print("No JPEG carved yet from seq3/seq4 channels")
+    best_path: Optional[Path] = None
+    if extracted:
+        # Prefer typ=7 if present, otherwise largest file.
+        def score(p: Path) -> tuple[int, int]:
+            name = p.name
+            typ7 = 1 if "_typ7_" in name else 0
+            return (typ7, p.stat().st_size)
+
+        best_path = sorted(extracted, key=score, reverse=True)[0]
+        final_path = out_dir / "download.jpg"
+        final_path.write_bytes(best_path.read_bytes())
+        print(f"  extracted download.jpg from {best_path.name} ({final_path.stat().st_size} bytes)")
+    elif debug:
+        print("  no ARTEMIS-record JPEGs extracted from seq3/seq4")
 
     return {
         "seq0_chunks": len(seq8_stream_chunks),
@@ -499,15 +537,17 @@ def send_photo_download_flow(
         "hb_sent": hb_sent,
         "req1285_sent": dl_req_sent,
         "dump_dir": str(out_dir),
-        "best_jpeg": str(out_dir / "seq3_carved_best.jpg")
-        if (out_dir / "seq3_carved_best.jpg").exists()
-        else (str(out_dir / "seq4_carved_best.jpg") if (out_dir / "seq4_carved_best.jpg").exists() else None),
+        "best_jpeg": str(out_dir / "download.jpg") if (out_dir / "download.jpg").exists() else None,
     }
 
 
 def _collect_media_entries(node: Any, out: List[Dict[str, Any]]) -> None:
     if isinstance(node, dict):
-        if "dirNum" in node and "mediaNum" in node:
+        if "mediaDirNum" in node and "mediaNum" in node:
+            ent = dict(node)
+            ent.setdefault("dirNum", ent.get("mediaDirNum"))
+            out.append(ent)
+        elif "dirNum" in node and "mediaNum" in node:
             out.append(node)
         for v in node.values():
             _collect_media_entries(v, out)
@@ -548,6 +588,8 @@ def fetch_media_list_page(
 ) -> List[Dict[str, Any]]:
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": item_cnt_per_page, "pageNo": page_no, "token": token}
+    thumb_reqs = get_seed_thumbnail_reqs()
+    thumb_cmd = {"cmdId": 772, "thumbnailReqs": thumb_reqs, "token": token}
 
     entries: List[Dict[str, Any]] = []
     seen_keys: set[tuple[int, int]] = set()
@@ -567,6 +609,7 @@ def fetch_media_list_page(
 
     try:
         for attempt in range(1, retries + 1):
+            seq0_fragments: List[bytes] = []
             if debug:
                 print(f"TX JSON: dev info (attempt {attempt}/{retries})")
             client.send_cmd_json(dev_info, art_ver=2, art_typ=2)
@@ -575,6 +618,9 @@ def fetch_media_list_page(
             if debug:
                 print(f"TX JSON: media list page={page_no} count={item_cnt_per_page} (attempt {attempt}/{retries})")
             client.send_cmd_json(media_list, art_ver=2, art_typ=4)
+            if debug:
+                print(f"TX JSON: thumbs (attempt {attempt}/{retries})")
+            client.send_cmd_json(thumb_cmd, art_ver=2, art_typ=5)
 
             deadline = time.time() + timeout_s
             while time.time() < deadline:
@@ -594,7 +640,9 @@ def fetch_media_list_page(
                     elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
                         seq = body[3]
                         client.send_f1(0xD1, make_ack_body_seq8([seq]))
-                        for ver, typ, payload in parse_artemis_records(body[4:]):
+                        chunk = body[4:]
+                        seq0_fragments.append(chunk)
+                        for ver, typ, payload in parse_artemis_records(chunk):
                             if typ not in (4, 36):
                                 continue
                             obj = decrypt_payload_b64_bytes(payload)
@@ -606,7 +654,8 @@ def fetch_media_list_page(
                             _collect_media_entries(obj, found)
                             for ent in found:
                                 try:
-                                    key = (int(ent.get("dirNum")), int(ent.get("mediaNum")))
+                                    dir_num = ent.get("dirNum", ent.get("mediaDirNum"))
+                                    key = (int(dir_num), int(ent.get("mediaNum")))
                                 except Exception:
                                     continue
                                 if key in seen_keys:
@@ -619,7 +668,30 @@ def fetch_media_list_page(
                     _collect_media_entries(obj, found)
                     for ent in found:
                         try:
-                            key = (int(ent.get("dirNum")), int(ent.get("mediaNum")))
+                            dir_num = ent.get("dirNum", ent.get("mediaDirNum"))
+                            key = (int(dir_num), int(ent.get("mediaNum")))
+                        except Exception:
+                            continue
+                        if key in seen_keys:
+                            continue
+                        seen_keys.add(key)
+                        entries.append(ent)
+            if seq0_fragments:
+                assembled_seq0 = b"".join(seq0_fragments)
+                for ver, typ, payload in parse_artemis_records(assembled_seq0):
+                    if typ not in (4, 36):
+                        continue
+                    obj = decrypt_payload_b64_bytes(payload)
+                    if not obj:
+                        continue
+                    if debug:
+                        print("RX JSON media list (assembled):", obj)
+                    found: List[Dict[str, Any]] = []
+                    _collect_media_entries(obj, found)
+                    for ent in found:
+                        try:
+                            dir_num = ent.get("dirNum", ent.get("mediaDirNum"))
+                            key = (int(dir_num), int(ent.get("mediaNum")))
                         except Exception:
                             continue
                         if key in seen_keys:
@@ -670,7 +742,7 @@ def download_photo_page(
     root.mkdir(parents=True, exist_ok=True)
     print(f"Downloading {len(photos)} photo(s) from page {page_no} into {root} ...")
     for idx, entry in enumerate(photos, start=1):
-        dir_num = int(entry.get("dirNum"))
+        dir_num = int(entry.get("dirNum", entry.get("mediaDirNum")))
         media_num = int(entry.get("mediaNum"))
         media_dir = root / f"{dir_num}_{media_num}"
         print(f"[{idx}/{len(photos)}] dir={dir_num} media={media_num}")

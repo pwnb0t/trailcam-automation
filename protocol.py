@@ -62,6 +62,33 @@ def parse_artemis_records(assembled: bytes):
     return out
 
 
+def parse_artemis_records_strict(assembled: bytes):
+    """Parse ARTEMIS records by advancing to the end of each record.
+
+    The download data channels can contain repeated/multiple ARTEMIS records back-to-back.
+    Using an overlapping scan (pos=i+1) can create false matches and corrupt extraction.
+    """
+    out = []
+    pos = 0
+    while True:
+        i = assembled.find(b"ARTEMIS\x00", pos)
+        if i == -1:
+            break
+        if i + 20 > len(assembled):
+            break
+        ver = int.from_bytes(assembled[i + 8 : i + 12], "little")
+        typ = int.from_bytes(assembled[i + 12 : i + 16], "little")
+        ln = int.from_bytes(assembled[i + 16 : i + 20], "little")
+        j = i + 20 + ln
+        if ln <= 0 or j > len(assembled):
+            pos = i + 1
+            continue
+        payload = assembled[i + 20 : j]
+        out.append((ver, typ, payload))
+        pos = j
+    return out
+
+
 def _pad16(b: bytes) -> bytes:
     pad = (-len(b)) % 16
     if pad:

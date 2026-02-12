@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """Extract photo-like JPEG payloads from TrailCam download traffic in a PCAP.
 
-This targets the high-volume camera->client D0 subtype 0x03 stream observed
-during cmdId=1285 download flows.
+This targets the high-volume camera->client D0 subtype streams observed during
+cmdId=1285 download flows.
+
+Important:
+- The binary streams often contain one or more ARTEMIS records (each with its
+  own header and payload). Naively carving "first SOI -> last EOI" across the
+  whole stream can mix multiple JPEGs and/or metadata and yield images that are
+  mostly decodable but visibly corrupted near the bottom.
+- Prefer extracting per-ARTEMIS-record payloads and then carving/validating
+  within those payloads.
 """
 
 import argparse
@@ -105,6 +113,43 @@ def carve_jpegs(blob: bytes) -> List[bytes]:
     return uniq
 
 
+def parse_artemis_records_strict(blob: bytes) -> List[Tuple[int, int, int, bytes]]:
+    """Return list of (offset, ver, typ, payload) with strict forward scanning."""
+    out: List[Tuple[int, int, int, bytes]] = []
+    pos = 0
+    while True:
+        i = blob.find(b"ARTEMIS\x00", pos)
+        if i == -1 or i + 20 > len(blob):
+            break
+        ver = int.from_bytes(blob[i + 8 : i + 12], "little")
+        typ = int.from_bytes(blob[i + 12 : i + 16], "little")
+        ln = int.from_bytes(blob[i + 16 : i + 20], "little")
+        j = i + 20 + ln
+        if ln <= 0 or j > len(blob):
+            pos = i + 1
+            continue
+        out.append((i, ver, typ, blob[i + 20 : j]))
+        pos = j
+    return out
+
+
+def best_jpeg_from_payload(payload: bytes) -> bytes | None:
+    """Return best JPEG candidate within a single ARTEMIS payload."""
+    # Commonly: 72-byte header then JPEG bytes.
+    if len(payload) >= 72 and payload[72:75] == b"\xff\xd8\xff":
+        data = payload[72:]
+    else:
+        data = payload
+
+    soi = data.find(b"\xff\xd8\xff")
+    if soi == -1:
+        return None
+    eoi = data.rfind(b"\xff\xd9")
+    if eoi == -1 or eoi <= soi:
+        return None
+    return data[soi : eoi + 2]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("pcap", help="Input PCAP")
@@ -112,6 +157,12 @@ def main() -> int:
     ap.add_argument("--dst", required=True, help="Client IP")
     ap.add_argument("--subtype", type=lambda x: int(x, 0), default=0x03, help="D0 subtype (default: 0x03)")
     ap.add_argument("--out-dir", default="out/extract", help="Output directory")
+    ap.add_argument(
+        "--mode",
+        choices=["artemis", "carve"],
+        default="artemis",
+        help="Extraction mode (default: %(default)s). 'artemis' extracts per-record payload JPEGs; 'carve' carves across whole stream.",
+    )
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -132,18 +183,54 @@ def main() -> int:
 
     print(f"chunks={len(chunks)} bytes={len(blob)} seq_unique={len(seq_hist)} raw={raw_path}")
 
-    cands = carve_jpegs(blob)
-    if not cands:
-        print("No JPEG markers found.")
+    if args.mode == "carve":
+        cands = carve_jpegs(blob)
+        if not cands:
+            print("No JPEG markers found.")
+            return 2
+        sizes = sorted([(len(c), i, c) for i, c in enumerate(cands, 1)], reverse=True)
+        for size, i, data in sizes:
+            path = out_dir / f"carved_{i:03d}_{size}.jpg"
+            path.write_bytes(data)
+        largest = sizes[0]
+        print(f"carved={len(cands)} largest={largest[0]} -> carved_{{id}}_{{size}}.jpg")
+        return 0
+
+    # Default: strict ARTEMIS record extraction
+    recs = parse_artemis_records_strict(blob)
+    if not recs:
+        print("No ARTEMIS records found in stream; falling back to carve.")
+        cands = carve_jpegs(blob)
+        if not cands:
+            print("No JPEG markers found.")
+            return 2
+        sizes = sorted([(len(c), i, c) for i, c in enumerate(cands, 1)], reverse=True)
+        for size, i, data in sizes:
+            path = out_dir / f"carved_{i:03d}_{size}.jpg"
+            path.write_bytes(data)
+        largest = sizes[0]
+        print(f"carved={len(cands)} largest={largest[0]} -> carved_{{id}}_{{size}}.jpg")
+        return 0
+
+    extracted: List[Tuple[int, int, int, int, bytes]] = []  # (size, idx, ver, typ, jpg)
+    for idx, (_off, ver, typ, payload) in enumerate(recs, 1):
+        jpg = best_jpeg_from_payload(payload)
+        if not jpg:
+            continue
+        extracted.append((len(jpg), idx, ver, typ, jpg))
+
+    if not extracted:
+        print(f"ARTEMIS records={len(recs)} but no JPEG found inside payloads.")
         return 2
 
-    # Persist all carved candidates; print largest first.
-    sizes = sorted([(len(c), i, c) for i, c in enumerate(cands, 1)], reverse=True)
-    for size, i, data in sizes:
-        path = out_dir / f"carved_{i:03d}_{size}.jpg"
-        path.write_bytes(data)
-    largest = sizes[0]
-    print(f"carved={len(cands)} largest={largest[0]} -> carved_{{id}}_{{size}}.jpg")
+    extracted.sort(reverse=True)
+    for size, idx, ver, typ, jpg in extracted:
+        path = out_dir / f"record_{idx:03d}_ver{ver}_typ{typ}_{size}.jpg"
+        path.write_bytes(jpg)
+    best = extracted[0]
+    best_path = out_dir / f"best_record_{best[1]:03d}_ver{best[2]}_typ{best[3]}_{best[0]}.jpg"
+    best_path.write_bytes(best[4])
+    print(f"artemis_records={len(recs)} extracted_jpegs={len(extracted)} best={best_path.name}")
     return 0
 
 
