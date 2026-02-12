@@ -13,7 +13,7 @@ from protocol import (
     decrypt_cmd_b64,
     decrypt_payload_b64_bytes,
     make_ack_body_seq16,
-    make_ack_body_seq8,
+    make_ack_body_seq_list16,
     make_ack_body_seq_window16,
     parse_artemis_records,
     parse_artemis_records_strict,
@@ -81,7 +81,7 @@ def handshake_prelude(client: TrailCamClient, debug: bool = False, duration_s: f
             client.send_f1(0xE1, b"")
         elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
             seq0 = (body[2] << 8) | body[3]
-            ack = make_ack_body_seq8([seq0])
+            ack = make_ack_body_seq_list16(0x00, [seq0])
             client.send_f1(0xD1, ack)
     if debug:
         print("Handshake opcodes seen:", {hex(k): v for k, v in seen_ops.items()})
@@ -204,7 +204,7 @@ def send_full_json_flow(
             if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
                 seq0 = (body[2] << 8) | body[3]
                 seen_seq0.add(seq0)
-                client.send_f1(0xD1, make_ack_body_seq8(sorted(seen_seq0)))
+                client.send_f1(0xD1, make_ack_body_seq_list16(0x00, sorted(seen_seq0)))
                 seq0_chunks[seq0] = body[4:]
                 for ver, typ, payload in parse_artemis_records(body[4:]):
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
@@ -220,7 +220,7 @@ def send_full_json_flow(
             elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x04:
                 seq16 = (body[2] << 8) | body[3]
                 seen_seq16.add(seq16)
-                client.send_f1(0xD1, make_ack_body_seq16(sorted(seen_seq16)))
+                client.send_f1(0xD1, make_ack_body_seq_list16(0x04, sorted(seen_seq16)))
                 large_chunks[seq16] = body[4:]
 
         objs = client.handle_incoming_payload(data)
@@ -382,7 +382,7 @@ def send_photo_download_flow(
                 saw_download_data.set()
             seq0 = (body[2] << 8) | body[3]
             # ACK each chunk sequence directly.
-            client.send_f1(0xD1, make_ack_body_seq8([seq0]))
+            client.send_f1(0xD1, make_ack_body_seq_list16(0x00, [seq0]))
             acked_seq0 += 1
             chunk = body[4:]
             seq0_stream_chunks[seq0] = chunk
@@ -468,7 +468,7 @@ def send_photo_download_flow(
                 print(f"  no jpeg markers in record idx={idx} ver={ver} typ={typ}")
 
     if found == 0:
-        print("No ver/type 6 or 7 records found in seq8 stream")
+        print("No ver/type 6 or 7 records found in seq0 stream")
 
     def parse_transfer_header72(payload: bytes) -> Optional[Dict[str, int]]:
         if len(payload) < 72:
@@ -646,7 +646,7 @@ def fetch_media_list_page(
                         client.send_f1(0xE1, b"")
                     elif opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
                         seq0 = (body[2] << 8) | body[3]
-                        client.send_f1(0xD1, make_ack_body_seq8([seq0]))
+                        client.send_f1(0xD1, make_ack_body_seq_list16(0x00, [seq0]))
                         chunk = body[4:]
                         seq0_fragments[seq0] = chunk
                         for ver, typ, payload in parse_artemis_records(chunk):

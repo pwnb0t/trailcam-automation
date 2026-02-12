@@ -41,7 +41,7 @@ class Row:
     direction: str
     opcode: str
     subtype: str
-    seq8: str
+    seq_lo: str
     seq16: str
     body_len: int
     art_ver: str
@@ -287,7 +287,7 @@ def iter_rows(
                 continue
 
         st: Optional[int] = None
-        seq8: Optional[int] = None
+        seq_lo: Optional[int] = None
         seq16: Optional[int] = None
         art_ver: Optional[int] = None
         art_typ: Optional[int] = None
@@ -296,14 +296,14 @@ def iter_rows(
         if op == 0xD0 and len(body) >= 2 and body[0] == 0xD1:
             st = body[1]
             if len(body) >= 4:
-                seq8 = body[3]
+                seq_lo = body[3]
                 seq16 = (body[2] << 8) | body[3]
         elif op == 0xD1:
             # ACK body is also D1-framed in practice; try to parse similarly.
             if len(body) >= 2 and body[0] == 0xD1:
                 st = body[1]
                 if len(body) >= 4:
-                    seq8 = body[3]
+                    seq_lo = body[3]
                     seq16 = (body[2] << 8) | body[3]
 
         art = _first_artemis_record(body)
@@ -329,7 +329,7 @@ def iter_rows(
             direction=direction,
             opcode=_opcode_name(op),
             subtype=_subtype_name(st),
-            seq8="" if seq8 is None else str(seq8),
+            seq_lo="" if seq_lo is None else str(seq_lo),
             seq16="" if seq16 is None else str(seq16),
             body_len=body_len,
             art_ver="" if art_ver is None else str(art_ver),
@@ -410,7 +410,7 @@ def main(argv: list[str]) -> int:
                 "direction",
                 "opcode",
                 "subtype",
-                "seq8",
+                "seq_lo",
                 "seq16",
                 "body_len",
                 "art_ver",
@@ -438,7 +438,7 @@ def main(argv: list[str]) -> int:
                     r.direction,
                     r.opcode,
                     r.subtype,
-                    r.seq8,
+                    r.seq_lo,
                     r.seq16,
                     r.body_len,
                     r.art_ver,

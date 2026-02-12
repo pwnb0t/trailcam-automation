@@ -20,10 +20,11 @@ def unpack_f1(pkt: bytes) -> Optional[Tuple[int, bytes, int]]:
     return opcode, body, blen
 
 
-def make_ack_body_seq8_with_subtype(subtype: int, seqs8: List[int]) -> bytes:
-    seqs = sorted(set(seqs8))
+def make_ack_body_seq_list16(subtype: int, seqs16: List[int]) -> bytes:
+    """Build an ACK body (inner D1 frame) containing a list of 16-bit sequence values."""
+    seqs = sorted(set(seqs16))
     count = len(seqs) & 0xFF
-    seq16 = b"".join(struct.pack(">H", s) for s in seqs)
+    seq16 = b"".join(struct.pack(">H", s & 0xFFFF) for s in seqs)
     return bytes([0xD1, subtype & 0xFF, 0x00, count]) + seq16
 
 
@@ -33,20 +34,9 @@ def make_ack_body_seq_window16(subtype: int, seqs16_ordered: List[int]) -> bytes
     return bytes([0xD1, subtype & 0xFF, 0x00, count]) + seq16
 
 
-# Backward-compatible alias (older name was misleading: it always packed 16-bit values).
-def make_ack_body_seq8_window(subtype: int, seqs8_ordered: List[int]) -> bytes:
-    return make_ack_body_seq_window16(subtype, seqs8_ordered)
-
-
-def make_ack_body_seq8(seqs8: List[int]) -> bytes:
-    return make_ack_body_seq8_with_subtype(0x00, seqs8)
-
-
 def make_ack_body_seq16(seqs16: List[int]) -> bytes:
-    seqs = sorted(set(seqs16))
-    count = len(seqs) & 0xFF
-    seq16 = b"".join(struct.pack(">H", s) for s in seqs)
-    return bytes([0xD1, 0x04, 0x00, count]) + seq16
+    # Historical helper for subtype 0x04. Prefer make_ack_body_seq_list16(subtype, seqs16).
+    return make_ack_body_seq_list16(0x04, seqs16)
 
 
 def parse_artemis_records(assembled: bytes):

@@ -55,11 +55,11 @@ Subtypes we actively handle:
 ACK frame for `opcode=0xD0` chunks.
 
 Important details:
-- For `subtype=0x00`, we ACK using the 8-bit sequence in `body[3]`.
-- For `subtype=0x03` and `subtype=0x04`, the sequence is effectively 16-bit (`body[2:4]`).
-  - The low byte is `body[3]`.
-  - The high byte is `body[2]`.
-  - Reassembly must be done by seq16 ordering, not seq8.
+- The sequence field is 16-bit (`body[2:4]`, big-endian) for all `D0` subtypes we handle.
+  - For `subtype=0x00`, captures typically show the high byte as `0x00` (so it looks like an 8-bit counter), but we treat it as 16-bit throughout.
+- The low byte is `body[3]`.
+- The high byte is `body[2]`.
+  - Reassembly must be done by seq16 ordering.
 
 The current client uses a small sliding-window ACK list (similar shape to the app) for `0x03`/`0x04`.
 
@@ -69,4 +69,3 @@ The current client uses a small sliding-window ACK list (similar shape to the ap
 Observed in some connect flows as outbound UDP packets to public IPs on port `32100`.
 - Likely cloud/telemetry/P2P bootstrap related.
 - Not required for local control (all local operations work without it).
-
