@@ -41,7 +41,7 @@ The client sends `F1 opcode=0xD1` with body shaped like:
 ```
 
 We currently send:
-- subtype `0x00`: `seq` values are the seq8 values we are ACKing.
+- subtype `0x00`: `seq` values are 16-bit (`body[2:4]`, big-endian). In captures the high byte is often `0x00`.
 - subtype `0x03`/`0x04`: `seq` values are the seq16 values we are ACKing.
 
 ## ARTEMIS Record (inside D0 payload streams)
@@ -58,4 +58,3 @@ The bulk streams and control streams embed records that look like:
 Parsing note:
 - When extracting from a continuous bulk stream, you must advance by `0x14 + len` for each record.
 - A naive scan that advances by `+1` can produce overlapping false positives on high-volume streams.
-

@@ -9,7 +9,8 @@ from protocol import decrypt_cmd_b64, parse_artemis_records
 
 
 def get_seed_thumbnail_reqs() -> Optional[List[Dict]]:
-    seq8_chunks: Dict[int, bytes] = {}
+    # subtype=0x00 control-plane chunks. Sequence is 16-bit at body[2:4] (hi byte is often 0 in captures).
+    seq0_chunks: Dict[int, bytes] = {}
     for pkt in CONNECT_D0_PACKETS:
         if len(pkt) < 8 or pkt[0] != 0xF1 or pkt[1] != 0xD0:
             continue
@@ -17,13 +18,13 @@ def get_seed_thumbnail_reqs() -> Optional[List[Dict]]:
         body = pkt[4 : 4 + blen]
         if len(body) < 4 or body[0] != 0xD1 or body[1] != 0x00:
             continue
-        seq8 = body[3]
-        seq8_chunks[seq8] = body[4:]
+        seq0 = (body[2] << 8) | body[3]
+        seq0_chunks[seq0] = body[4:]
 
-    if not seq8_chunks:
+    if not seq0_chunks:
         return None
 
-    assembled = b"".join(seq8_chunks[k] for k in sorted(seq8_chunks))
+    assembled = b"".join(seq0_chunks[k] for k in sorted(seq0_chunks))
     for _ver, _typ, payload in parse_artemis_records(assembled):
         obj = decrypt_cmd_b64(payload)
         if obj and obj.get("cmdId") == 772 and "thumbnailReqs" in obj:
