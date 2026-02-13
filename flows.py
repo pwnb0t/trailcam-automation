@@ -282,7 +282,6 @@ def send_photo_download_flow(
     dir_num: int,
     media_num: int,
     file_type: int = 0,
-    art_typ: int = 7,
     listen_s: float = 45.0,
     idle_break_s: float = 4.0,
     dump_dir: str = "out/download",
@@ -293,8 +292,9 @@ def send_photo_download_flow(
 
     Notes:
     - Uses app-like command shape: {"cmdId":1285,"downloadReqs":[...],"token":...}
-    - Uses ARTEMIS type 7 by default (seen in trailcam_10).
+    - Uses ARTEMIS type 7 (seen in trailcam_10).
     """
+    art_typ = 7
     req = {
         "cmdId": 1285,
         "downloadReqs": [{"fileType": file_type, "dirNum": dir_num, "mediaNum": media_num}],
@@ -896,6 +896,7 @@ def fetch_media_list_page(
 
     entries: List[Dict[str, Any]] = []
     seen_keys: set[tuple[int, int, int]] = set()
+    last_media_list_error: Optional[str] = None
     stop_hb = threading.Event()
 
     def hb_loop():
@@ -953,6 +954,8 @@ def fetch_media_list_page(
                                 continue
                             if debug:
                                 print("RX JSON media list:", obj)
+                            if obj.get("cmdId") == 768 and obj.get("getMediaListRet") not in (None, 0):
+                                last_media_list_error = str(obj.get("errorMsg") or obj)
                             found: List[Dict[str, Any]] = []
                             _collect_media_entries(obj, found)
                             for ent in found:
@@ -966,6 +969,8 @@ def fetch_media_list_page(
                                 entries.append(norm)
                 for obj in client.handle_incoming_payload(data):
                     # Some responses may arrive via generic JSON path.
+                    if obj.get("cmdId") == 768 and obj.get("getMediaListRet") not in (None, 0):
+                        last_media_list_error = str(obj.get("errorMsg") or obj)
                     found: List[Dict[str, Any]] = []
                     _collect_media_entries(obj, found)
                     for ent in found:
@@ -987,6 +992,8 @@ def fetch_media_list_page(
                         continue
                     if debug:
                         print("RX JSON media list (assembled):", obj)
+                    if obj.get("cmdId") == 768 and obj.get("getMediaListRet") not in (None, 0):
+                        last_media_list_error = str(obj.get("errorMsg") or obj)
                     found: List[Dict[str, Any]] = []
                     _collect_media_entries(obj, found)
                     for ent in found:
@@ -1004,6 +1011,8 @@ def fetch_media_list_page(
     finally:
         stop_hb.set()
 
+    if not entries and last_media_list_error:
+        print(f"Media list error: {last_media_list_error}")
     return entries
 
 
@@ -1079,7 +1088,6 @@ def download_photo_page(
     item_cnt_per_page: int = 45,
     limit: int = 12,
     out_root: str = "out/media",
-    art_typ: int = 7,
     listen_s: float = 45.0,
     idle_break_s: float = 4.0,
     debug: bool = False,
@@ -1119,7 +1127,6 @@ def download_photo_page(
             dir_num=dir_num,
             media_num=media_num,
             file_type=0,
-            art_typ=art_typ,
             listen_s=listen_s,
             idle_break_s=idle_break_s,
             dump_dir=str(media_dir),
@@ -1149,16 +1156,13 @@ def download_media_page(
     token: int,
     page_no: int = 0,
     item_cnt_per_page: int = 45,
-    photo_limit: int = 12,
-    video_limit: int = 0,
     out_root: str = "out/media",
-    art_typ: int = 7,
     listen_s: float = 75.0,
     idle_break_s: float = 2.0,
     video_fps: int = 30,
     debug: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Download a page worth of media entries (photos and optionally videos)."""
+    """Download all media entries returned in a single media-list page."""
     entries = fetch_media_list_page(
         client,
         token,
@@ -1170,8 +1174,8 @@ def download_media_page(
         print("No media entries found on requested page.")
         return []
 
-    photos = [e for e in entries if _is_photo_entry(e)][:photo_limit]
-    videos = [e for e in entries if _is_video_entry(e)][:video_limit]
+    photos = [e for e in entries if _is_photo_entry(e)]
+    videos = [e for e in entries if _is_video_entry(e)]
 
     root = Path(out_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -1192,7 +1196,6 @@ def download_media_page(
             dir_num=dir_num,
             media_num=media_num,
             file_type=0,
-            art_typ=art_typ,
             listen_s=listen_s,
             idle_break_s=idle_break_s,
             dump_dir=str(media_dir),

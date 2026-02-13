@@ -32,6 +32,7 @@ Response includes device fields (varies by firmware).
 
 Client sends:
 - `{"cmdId":768,"itemCntPerPage":45,"pageNo":0,"token":<login_token_u32>}`
+  - Note: camera returns an error for `itemCntPerPage >= 50` ("need less than 50").
 
 Response includes:
 - `mediaFiles`: list of entries

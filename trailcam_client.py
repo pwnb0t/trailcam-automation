@@ -20,7 +20,6 @@ from flows import (
     nmcli_rescan,
     send_video_download_flow,
     send_photo_download_flow,
-    send_full_json_flow,
     wifi_has_camera_ip,
 )
 
@@ -55,37 +54,33 @@ async def main():
         action="store_true",
         help="Enable verbose logging of incoming packets",
     )
-    parser.add_argument(
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument(
         "--login-only",
         action="store_true",
         help="Perform JSON login only and exit",
     )
-    parser.add_argument(
-        "--json-flow",
-        action="store_true",
-        help="After login, send dev info (cmdId=512) and media list (cmdId=768)",
-    )
-    parser.add_argument(
+    action.add_argument(
         "--download-photo",
         action="store_true",
         help="After login, request a single photo download via cmdId=1285",
     )
-    parser.add_argument(
+    action.add_argument(
         "--download-video",
         action="store_true",
         help="After login, request a single video playback/download via cmdId=769 and save an MP4",
     )
-    parser.add_argument(
+    action.add_argument(
         "--download-page",
         action="store_true",
-        help="After login, fetch one media-list page and download the newest photo entries",
+        help="After login, fetch one media-list page and download all media entries returned in that page",
     )
-    parser.add_argument(
+    action.add_argument(
         "--list-media-page",
         action="store_true",
         help="After login, fetch one media-list page and print entries",
     )
-    parser.add_argument(
+    action.add_argument(
         "--list-media-all",
         action="store_true",
         help="After login, page through media list and print entries until stop condition",
@@ -106,24 +101,12 @@ async def main():
         "--page-item-cnt",
         type=int,
         default=45,
-        help="Items per media-list page request (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--page-download-limit",
-        type=int,
-        default=12,
-        help="Maximum photos to download from fetched page (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--page-video-limit",
-        type=int,
-        default=0,
-        help="Maximum videos to download from fetched page when using --download-page (default: %(default)s)",
+        help="Items per media-list page request (default: %(default)s). This effectively controls how many items --download-page will download.",
     )
     parser.add_argument(
         "--media-out-dir",
         default="out/media",
-        help="Output directory root for --download-page results (default: %(default)s)",
+        help="Output directory root for downloads (default: %(default)s)",
     )
     parser.add_argument(
         "--dir-num",
@@ -150,12 +133,6 @@ async def main():
         help="Stop download/playback capture after this many seconds of data-channel idle time (default: %(default)s)",
     )
     parser.add_argument(
-        "--download-art-typ",
-        type=int,
-        default=7,
-        help="ARTEMIS type to use for cmdId=1285 photo download request (default: %(default)s; app often uses 7)",
-    )
-    parser.add_argument(
         "--video-fps",
         type=int,
         default=30,
@@ -166,29 +143,17 @@ async def main():
         default="",
         help="Explicit output MP4 path for --download-video (default: out/media/dir<dirNum>/media<mediaNum>.mp4)",
     )
-    parser.add_argument(
-        "--dump-thumbs",
-        action="store_true",
-        help="Write gallery thumbnails from large D0 stream to out/",
-    )
-    parser.add_argument(
-        "--dump-artemis",
-        action="store_true",
-        help="Write raw ARTEMIS payloads (media list responses) to out/artemis/",
-    )
-    parser.add_argument(
-        "--thumb-offset",
-        type=int,
-        default=0,
-        help="Offset mediaNum for thumbnailReqs (use to align with current files)",
-    )
-    parser.add_argument(
-        "--thumb-dir",
-        type=int,
-        default=None,
-        help="Override dirNum for thumbnailReqs (e.g. 100/101/102)",
-    )
     args = parser.parse_args()
+
+    if (args.dir_num is not None or args.media_num is not None) and not (
+        args.download_photo or args.download_video
+    ):
+        raise SystemExit("--dir-num/--media-num are only valid with --download-photo or --download-video")
+
+    # Camera returns an error if itemCntPerPage >= 50 ("need less than 50").
+    if (args.download_page or args.list_media_page or args.list_media_all) and args.page_item_cnt >= 50:
+        print(f"Warning: camera rejects --page-item-cnt >= 50; clamping {args.page_item_cnt} -> 45")
+        args.page_item_cnt = 45
 
     # If already connected to the camera AP, skip BLE wake/connect work.
     already_connected = False
@@ -267,103 +232,102 @@ async def main():
         else:
             client.token_int = token
             print(f"Login token: {token}")
-            if args.login_only:
-                return
-            if args.json_flow:
-                send_full_json_flow(
-                    client,
-                    token,
-                    dump_thumbs=args.dump_thumbs,
-                    thumb_offset=args.thumb_offset,
-                    thumb_dir=args.thumb_dir,
-                    dump_artemis=args.dump_artemis,
-                    debug=args.debug,
+        if args.login_only:
+            return
+        if token is None and (
+            args.download_photo
+            or args.download_video
+            or args.download_page
+            or args.list_media_page
+            or args.list_media_all
+        ):
+            raise SystemExit("Login token missing; cannot continue with requested action")
+        if args.download_photo:
+            if args.dir_num is None or args.media_num is None:
+                raise SystemExit("--download-photo requires --dir-num and --media-num")
+            send_photo_download_flow(
+                client,
+                token,
+                dir_num=args.dir_num,
+                media_num=args.media_num,
+                file_type=0,
+                listen_s=args.download_listen_s,
+                idle_break_s=args.download_idle_s,
+                debug=args.debug,
+            )
+            return
+
+        if args.download_video:
+            if args.dir_num is None or args.media_num is None:
+                raise SystemExit("--download-video requires --dir-num and --media-num")
+            if args.video_out:
+                out_mp4 = args.video_out
+            else:
+                out_mp4 = str(Path(args.media_out_dir) / f"dir{args.dir_num}" / f"media{args.media_num}.mp4")
+            send_video_download_flow(
+                client,
+                token,
+                dir_num=args.dir_num,
+                media_num=args.media_num,
+                file_type=1,
+                fps=args.video_fps,
+                listen_s=args.download_listen_s,
+                idle_break_s=args.download_idle_s,
+                out_mp4_path=out_mp4,
+                debug=args.debug,
+            )
+            return
+
+        if args.download_page:
+            results = download_media_page(
+                client,
+                token,
+                page_no=args.page_no,
+                item_cnt_per_page=args.page_item_cnt,
+                out_root=args.media_out_dir,
+                listen_s=args.download_listen_s,
+                idle_break_s=args.download_idle_s,
+                video_fps=args.video_fps,
+                debug=args.debug,
+            )
+            print(f"Downloaded page results: {len(results)} item(s)")
+            for r in results:
+                kind = r.get("kind", "media")
+                path = r.get("path")
+                print(f"  {kind} dir={r.get('dirNum')} media={r.get('mediaNum')} path={path or 'none'}")
+            return
+
+        if args.list_media_page:
+            page = fetch_media_list_page(
+                client,
+                token,
+                page_no=args.page_no,
+                item_cnt_per_page=args.page_item_cnt,
+                debug=args.debug,
+            )
+            print(f"Media entries (page {args.page_no}): {len(page)}")
+            for e in page:
+                print(
+                    f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "
+                    f"name={e.get('fileName') or ''} time={e.get('mediaTime') or ''} durMs={e.get('durationMs') or ''}"
                 )
-            if args.download_photo:
-                if args.dir_num is None or args.media_num is None:
-                    raise SystemExit("--download-photo requires --dir-num and --media-num")
-                send_photo_download_flow(
-                    client,
-                    token,
-                    dir_num=args.dir_num,
-                    media_num=args.media_num,
-                    file_type=0,
-                    art_typ=args.download_art_typ,
-                    listen_s=args.download_listen_s,
-                    idle_break_s=args.download_idle_s,
-                    debug=args.debug,
+            return
+
+        if args.list_media_all:
+            all_entries = fetch_media_list_all(
+                client,
+                token,
+                item_cnt_per_page=args.page_item_cnt,
+                max_pages=args.list_max_pages,
+                debug=args.debug,
+            )
+            print(f"Media entries (all): {len(all_entries)}")
+            for e in all_entries:
+                print(
+                    f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "
+                    f"name={e.get('fileName') or ''} time={e.get('mediaTime') or ''} durMs={e.get('durationMs') or ''}"
                 )
-            if args.download_video:
-                if args.dir_num is None or args.media_num is None:
-                    raise SystemExit("--download-video requires --dir-num and --media-num")
-                if args.video_out:
-                    out_mp4 = args.video_out
-                else:
-                    out_mp4 = str(
-                        Path(args.media_out_dir) / f"dir{args.dir_num}" / f"media{args.media_num}.mp4"
-                    )
-                send_video_download_flow(
-                    client,
-                    token,
-                    dir_num=args.dir_num,
-                    media_num=args.media_num,
-                    file_type=1,
-                    fps=args.video_fps,
-                    listen_s=args.download_listen_s,
-                    idle_break_s=args.download_idle_s,
-                    out_mp4_path=out_mp4,
-                    debug=args.debug,
-                )
-            if args.download_page:
-                results = download_media_page(
-                    client,
-                    token,
-                    page_no=args.page_no,
-                    item_cnt_per_page=args.page_item_cnt,
-                    photo_limit=args.page_download_limit,
-                    video_limit=args.page_video_limit,
-                    out_root=args.media_out_dir,
-                    art_typ=args.download_art_typ,
-                    listen_s=args.download_listen_s,
-                    idle_break_s=args.download_idle_s,
-                    video_fps=args.video_fps,
-                    debug=args.debug,
-                )
-                print(f"Downloaded page results: {len(results)} item(s)")
-                for r in results:
-                    kind = r.get("kind", "media")
-                    path = r.get("path")
-                    print(f"  {kind} dir={r.get('dirNum')} media={r.get('mediaNum')} path={path or 'none'}")
-            if args.list_media_page:
-                page = fetch_media_list_page(
-                    client,
-                    token,
-                    page_no=args.page_no,
-                    item_cnt_per_page=args.page_item_cnt,
-                    debug=args.debug,
-                )
-                print(f"Media entries (page {args.page_no}): {len(page)}")
-                for e in page:
-                    print(
-                        f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "
-                        f"name={e.get('fileName') or ''} time={e.get('mediaTime') or ''} durMs={e.get('durationMs') or ''}"
-                    )
-                return
-            if args.list_media_all:
-                all_entries = fetch_media_list_all(
-                    client,
-                    token,
-                    item_cnt_per_page=args.page_item_cnt,
-                    max_pages=args.list_max_pages,
-                    debug=args.debug,
-                )
-                print(f"Media entries (all): {len(all_entries)}")
-                for e in all_entries:
-                    print(
-                        f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "
-                        f"name={e.get('fileName') or ''} time={e.get('mediaTime') or ''} durMs={e.get('durationMs') or ''}"
-                    )
-                return
+            return
 
     finally:
         client.close()

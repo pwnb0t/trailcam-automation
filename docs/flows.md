@@ -18,6 +18,10 @@ This describes the high-level operation sequences the client performs.
 - Parse `mediaFiles` entries and thumbnail records.
   - The CLI supports fetching a single page (`--list-media-page`) or paging until stop (`--list-media-all`, capped by `--list-max-pages`).
 
+## Download Page (Media list page + downloads)
+- Fetch a single media-list page (`cmdId=768`) using `--page-no` and `--page-item-cnt`.
+- Download all photo/video entries returned in that page (`--download-page`).
+
 ## Download Photo (cmdId=1285 + bulk transfer)
 - Send `cmdId=1285` download request for `(dirNum, mediaNum, fileType=0)`.
 - Maintain heartbeat (`cmdId=525`) during transfer.
