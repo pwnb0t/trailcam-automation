@@ -24,7 +24,31 @@
 - `pcap/details.md`
 
 
+---------
 
+# Some things I want to do:
+
+* Add a .env or env.yml file to store the various settings of the client
+  * Add trailcams to env. Have "front" "back" aliases and then MAC in the env.
+  * I think I want most "default" options to be configurable from this env. The "single download" and others like that should still be script options.
+* Create a Config class to hold env or anything else. Ideally it would be immutable but probably would have to be after
+* Maybe remove SSID option and only use MAC address option. Should get SSID from MAC from the trailcam. Could still just do both in the env with SSID as a verification step?
+* /mnt/trailcam is hooked up. 
+  * Need to send files to /mnt/trailcam/staging then the final output to /mnt/trailcam/media
+* Need an orchestration script (trailcam_sync.py)
+  * Needs to have env.
+  * Resumable state file (perhaps a manifest of items to download and what is downloaded)
+* File structure and naming/renaming
+  * Download files to staging. Move files from staging to media and rename
+  * front_YYYYMMDD_HHMMSS.jpg, back_20260213_132127.mp4, ...
+  * Split by week: /mnt/trailcam/media/YYYY-WW/front_YYYYMMDD_HHMMSS.jpg
+
+* Code reorg
+  * Rename trailcam_client.py to trailcam_client_runner.py
+  * Add trailcam_sync.py (orchestrator)
+  * All the trailcam_client related files go in src/client/
+  * All the trailcam_sync related files go in src/sync/
+  * Could also have src/common/ or just better named dirs as we go.
 
 ---------
 
