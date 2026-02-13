@@ -4,7 +4,7 @@ The project uses a YAML config file to define cameras and default runtime settin
 
 ## Example
 
-See `config.example.yaml`.
+See `config.example.yaml` (you can name your real file `config.yaml` or `config.yml`).
 
 ## Intended Usage
 
@@ -13,8 +13,8 @@ See `config.example.yaml`.
   - `ssid`: expected camera AP SSID (used as a verification step)
 - Put default knobs under `defaults:` (wifi interface, UDP bind port, page sizes, timeouts).
 - Put output paths under `paths:`.
+  - On `piiter`, `/mnt/trailcam/staging` is the intended `media_out_dir`.
 
 ## Notes
 
 - The login token returned by the camera is runtime state and is not stored in config.
-

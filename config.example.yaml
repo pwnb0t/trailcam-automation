@@ -20,10 +20,6 @@ defaults:
   video_fps: 30
 
 paths:
-  media_out_dir: "out/media"
+  # When /mnt/trailcam is mounted (piiter), write final media directly to NAS.
+  media_out_dir: "/mnt/trailcam/staging"
   tmp_dir: "out/tmp"
-
-  # Future: optional NAS integration (staging -> final)
-  # staging_dir: "/mnt/trailcam/staging"
-  # final_media_dir: "/mnt/trailcam/media"
-

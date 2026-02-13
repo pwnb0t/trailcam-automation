@@ -27,6 +27,17 @@ from session import TrailCamSession
 from commands import DownloadMediaPageCommand
 
 
+def _default_media_out_dir() -> str:
+    # Prefer NAS staging when present (piiter); otherwise fall back to local.
+    p = Path("/mnt/trailcam/staging")
+    try:
+        if p.exists() and p.is_dir():
+            return str(p)
+    except Exception:
+        pass
+    return "out/media"
+
+
 async def main():
     parser = argparse.ArgumentParser(
         description="TrailCam client: BLE wake, connect, JSON login, and media list."
@@ -108,7 +119,7 @@ async def main():
     )
     parser.add_argument(
         "--media-out-dir",
-        default="out/media",
+        default=_default_media_out_dir(),
         help="Output directory root for downloads (default: %(default)s)",
     )
     parser.add_argument(
