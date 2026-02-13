@@ -587,6 +587,7 @@ def send_video_download_flow(
     listen_s: float = 45.0,
     idle_break_s: float = 2.0,
     out_mp4_path: str = "out/media/video.mp4",
+    temp_root: str = "out/tmp",
     debug: bool = False,
 ):
     """Start playback for a gallery video and reconstruct an MP4 (H.264 + AAC).
@@ -613,9 +614,9 @@ def send_video_download_flow(
     out_mp4 = Path(out_mp4_path)
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
 
-    tmp_root = Path(tempfile.mkdtemp(prefix=f"trailcam_video_{dir_num}_{media_num}_", dir="/tmp"))
-    tmp_h264 = tmp_root / "video.h264"
-    tmp_aac = tmp_root / "audio.aac"
+    # Avoid /tmp on small devices (often tmpfs) by default.
+    temp_root_p = Path(temp_root)
+    temp_root_p.mkdir(parents=True, exist_ok=True)
 
     stop_hb = threading.Event()
     hb_sent = 0
@@ -645,143 +646,142 @@ def send_video_download_flow(
     last_data_ts: Optional[float] = None
     end = time.time() + listen_s
 
-    try:
-        while time.time() < end:
-            got = client.recv()
-            if not got:
-                if last_data_ts is not None and (time.time() - last_data_ts) > idle_break_s:
-                    break
-                continue
-            addr, data = got
-            if addr[0] != CAMERA_IP:
-                continue
+    with tempfile.TemporaryDirectory(
+        prefix=f"trailcam_video_{dir_num}_{media_num}_",
+        dir=str(temp_root_p),
+    ) as tmp_dir:
+        tmp_root = Path(tmp_dir)
+        tmp_h264 = tmp_root / "video.h264"
+        tmp_aac = tmp_root / "audio.aac"
 
-            parsed = unpack_f1(data)
-            if parsed:
-                opcode, body, _ = parsed
-                if opcode in (0x41, 0x42):
-                    client.send_f1(opcode, body)
-                    continue
-                if opcode == 0xE0:
-                    client.send_f1(0xE1, b"")
-                    continue
-
-                # Data channel: D0 subtype 0x02
-                if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x02:
-                    seq16 = (body[2] << 8) | body[3]
-                    if seq16 not in chunks02:
-                        chunks02[seq16] = body[4:]
-                        last_data_ts = time.time()
-                    ack_win.append(seq16)
-                    client.send_f1(0xD1, make_ack_body_seq_window16(0x02, list(ack_win)))
-                    continue
-
-            # Control plane JSON
-            objs = client.handle_incoming_payload(data)
-            for obj in objs:
-                if debug:
-                    print("RX JSON:", obj)
-                if obj.get("cmdId") == 769 or "startPbRet" in obj:
-                    start_play_info = obj
-
-        if not chunks02:
-            raise RuntimeError("No D0 subtype=0x02 chunks captured for video stream")
-
-        assembled = b"".join(chunks02[k] for k in sorted(chunks02))
-        records = parse_artemis_records_strict(assembled)
-        if not records:
-            raise RuntimeError("No ARTEMIS records found in subtype=0x02 assembled stream")
-
-        # Decode + decrypt ver=4 payload data.
-        v_h264 = bytearray()
-        a_aac = bytearray()
-        v_cnt = 0
-        a_cnt = 0
-
-        for ver, _typ, payload in records:
-            if ver != 4:
-                continue
-            hdr = _parse_artemis_v4_payload_header(payload)
-            if not hdr:
-                continue
-            data_off = hdr["header_len"]
-            data_len = hdr["data_len"]
-            raw = payload[data_off : data_off + data_len]
-            dec = decrypt_v4_media_data_pages(raw)
-
-            # Heuristic classification:
-            # - video-like: width/height set and data_len_off=16
-            # - audio-like: width/height 0 and data_len_off=20
-            if hdr["data_len_off"] == 16 and hdr["width"] and hdr["height"]:
-                v_h264 += dec
-                v_cnt += 1
-            elif hdr["data_len_off"] == 20 and hdr["width"] == 0 and hdr["height"] == 0:
-                a_aac += dec
-                a_cnt += 1
-
-        if debug:
-            print(f"Start play info: {start_play_info}")
-        print(f"Captured subtype_02 chunks={len(chunks02)} bytes={len(assembled)}")
-        print(f"Parsed ver=4 records: video={v_cnt} audio={a_cnt}")
-
-        if not v_h264:
-            raise RuntimeError("No decrypted video bytes produced (ver=4 video records not found)")
-        if not a_aac:
-            raise RuntimeError("No decrypted audio bytes produced (ver=4 audio records not found)")
-
-        tmp_h264.write_bytes(bytes(v_h264))
-        tmp_aac.write_bytes(bytes(a_aac))
-
-        if subprocess.run(["ffmpeg", "-version"], capture_output=True).returncode != 0:
-            raise RuntimeError("ffmpeg not available on PATH, cannot mux video")
-
-        mp4_tmp = tmp_root / "out.mp4"
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-r",
-            str(fps),
-            "-i",
-            str(tmp_h264),
-            "-i",
-            str(tmp_aac),
-            "-c",
-            "copy",
-            "-bsf:a",
-            "aac_adtstoasc",
-            str(mp4_tmp),
-        ]
-        p = subprocess.run(cmd, capture_output=True, text=True)
-        if p.returncode != 0 or not mp4_tmp.exists() or mp4_tmp.stat().st_size <= 0:
-            err = (p.stderr or "").strip()
-            raise RuntimeError(f"ffmpeg mux failed: {err or 'unknown error'}")
-
-        out_mp4.write_bytes(mp4_tmp.read_bytes())
-        print(f"Wrote MP4: {out_mp4} ({out_mp4.stat().st_size} bytes)")
-
-    finally:
-        # Stop playback and heartbeats.
         try:
-            client.send_cmd_json(stop_req, art_ver=2, art_typ=2)
-        except Exception:
-            pass
-        stop_hb.set()
+            while time.time() < end:
+                got = client.recv()
+                if not got:
+                    if last_data_ts is not None and (time.time() - last_data_ts) > idle_break_s:
+                        break
+                    continue
+                addr, data = got
+                if addr[0] != CAMERA_IP:
+                    continue
 
-        # Best-effort cleanup of temp dir.
-        try:
-            for p in (tmp_h264, tmp_aac, tmp_root / "out.mp4"):
-                if p.exists():
-                    p.unlink()
-            tmp_root.rmdir()
-        except Exception:
-            pass
+                parsed = unpack_f1(data)
+                if parsed:
+                    opcode, body, _ = parsed
+                    if opcode in (0x41, 0x42):
+                        client.send_f1(opcode, body)
+                        continue
+                    if opcode == 0xE0:
+                        client.send_f1(0xE1, b"")
+                        continue
+
+                    # Data channel: D0 subtype 0x02
+                    if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x02:
+                        seq16 = (body[2] << 8) | body[3]
+                        if seq16 not in chunks02:
+                            chunks02[seq16] = body[4:]
+                            last_data_ts = time.time()
+                        ack_win.append(seq16)
+                        client.send_f1(0xD1, make_ack_body_seq_window16(0x02, list(ack_win)))
+                        continue
+
+                # Control plane JSON
+                objs = client.handle_incoming_payload(data)
+                for obj in objs:
+                    if debug:
+                        print("RX JSON:", obj)
+                    if obj.get("cmdId") == 769 or "startPbRet" in obj:
+                        start_play_info = obj
+
+            if not chunks02:
+                raise RuntimeError("No D0 subtype=0x02 chunks captured for video stream")
+
+            assembled = b"".join(chunks02[k] for k in sorted(chunks02))
+            records = parse_artemis_records_strict(assembled)
+            if not records:
+                raise RuntimeError("No ARTEMIS records found in subtype=0x02 assembled stream")
+
+            # Decode + decrypt ver=4 payload data.
+            v_h264 = bytearray()
+            a_aac = bytearray()
+            v_cnt = 0
+            a_cnt = 0
+
+            for ver, _typ, payload in records:
+                if ver != 4:
+                    continue
+                hdr = _parse_artemis_v4_payload_header(payload)
+                if not hdr:
+                    continue
+                data_off = hdr["header_len"]
+                data_len = hdr["data_len"]
+                raw = payload[data_off : data_off + data_len]
+                dec = decrypt_v4_media_data_pages(raw)
+
+                # Heuristic classification:
+                # - video-like: width/height set and data_len_off=16
+                # - audio-like: width/height 0 and data_len_off=20
+                if hdr["data_len_off"] == 16 and hdr["width"] and hdr["height"]:
+                    v_h264 += dec
+                    v_cnt += 1
+                elif hdr["data_len_off"] == 20 and hdr["width"] == 0 and hdr["height"] == 0:
+                    a_aac += dec
+                    a_cnt += 1
+
+            if debug:
+                print(f"Start play info: {start_play_info}")
+            print(f"Captured subtype_02 chunks={len(chunks02)} bytes={len(assembled)}")
+            print(f"Parsed ver=4 records: video={v_cnt} audio={a_cnt}")
+
+            if not v_h264:
+                raise RuntimeError("No decrypted video bytes produced (ver=4 video records not found)")
+            if not a_aac:
+                raise RuntimeError("No decrypted audio bytes produced (ver=4 audio records not found)")
+
+            tmp_h264.write_bytes(bytes(v_h264))
+            tmp_aac.write_bytes(bytes(a_aac))
+
+            if subprocess.run(["ffmpeg", "-version"], capture_output=True).returncode != 0:
+                raise RuntimeError("ffmpeg not available on PATH, cannot mux video")
+
+            mp4_tmp = tmp_root / "out.mp4"
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-r",
+                str(fps),
+                "-i",
+                str(tmp_h264),
+                "-i",
+                str(tmp_aac),
+                "-c",
+                "copy",
+                "-bsf:a",
+                "aac_adtstoasc",
+                str(mp4_tmp),
+            ]
+            p = subprocess.run(cmd, capture_output=True, text=True)
+            if p.returncode != 0 or not mp4_tmp.exists() or mp4_tmp.stat().st_size <= 0:
+                err = (p.stderr or "").strip()
+                raise RuntimeError(f"ffmpeg mux failed: {err or 'unknown error'}")
+
+            out_mp4.write_bytes(mp4_tmp.read_bytes())
+            print(f"Wrote MP4: {out_mp4} ({out_mp4.stat().st_size} bytes)")
+
+        finally:
+            # Stop playback and heartbeats.
+            try:
+                client.send_cmd_json(stop_req, art_ver=2, art_typ=2)
+            except Exception:
+                pass
+            stop_hb.set()
 
     return {
         "out_mp4": str(out_mp4),
-        "tmp_root": str(tmp_root),
+        "tmp_root": str(temp_root_p),
         "hb_sent": hb_sent,
         "video_records": v_cnt,
         "audio_records": a_cnt,
