@@ -1,5 +1,15 @@
 Summaries of certain pcap files.
 
+# trailcam_1.pcap 
+trailcam_1.pcap is a capture of packets from the start of connecting to the trailcam, then refreshing the gallery, downloading a photo, downloading a video, etc... and necessarily in that order (I don't remember the order).
+
+# trailcam_2-*.pcap
+trailcam_2-* files are isolated captures of traffic.
+
+# trailcam_3-2-refresh.pcap
+trailcam_3-2-refresh.pcap is just another capture of the refresh operation.
+
+
 # trailcam_8-3-view-and-download-video.pcap
 
 From pcap/trailcam_8-3-view-and-download-video.pcap, the app’s start playback request (cmdId=769) is in frame 1715 and decrypts to:
