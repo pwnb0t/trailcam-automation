@@ -115,19 +115,19 @@ async def main():
         "--download-listen-s",
         type=float,
         default=45.0,
-        help="Seconds to listen for download data after cmdId=1285 (default: %(default)s)",
+        help="Seconds to listen for bulk download/playback data after sending a download/start-play request (default: %(default)s)",
     )
     parser.add_argument(
         "--download-idle-s",
         type=float,
         default=4.0,
-        help="Stop download capture after this many seconds of data-channel idle time (default: %(default)s)",
+        help="Stop download/playback capture after this many seconds of data-channel idle time (default: %(default)s)",
     )
     parser.add_argument(
         "--download-art-typ",
         type=int,
         default=7,
-        help="ARTEMIS type to use for cmdId=1285 request (default: %(default)s; app often uses 7)",
+        help="ARTEMIS type to use for cmdId=1285 photo download request (default: %(default)s; app often uses 7)",
     )
     parser.add_argument(
         "--video-fps",
