@@ -11,7 +11,7 @@
 - Video download parity is not implemented yet.
 
 ## Next Steps
-1. Implement video playback/download (`cmdId=769` start play, stream decode, `cmdId=770` stop) and reconstruct an MP4 offline.
+1. Implement video playback/download (`cmdId=769` start play, data-plane decode/decrypt, `cmdId=770` stop) and reconstruct a valid MP4.
 2. Make paging deterministic for media list (`pageNo=0..N`) with a clean stop condition.
 3. Add offline “replay from pcap” tests for parsers and reassembly to prevent regressions.
 

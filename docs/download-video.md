@@ -61,6 +61,11 @@ Empirical ver=4 payload header:
 - Width/height in header:
   - `u32le(payload[28:32]) == 1920`
   - `u32le(payload[32:36]) == 1080`
+- Session number correlation:
+  - `u32le(payload[48:52]) == sessionNo` from the `cmdId=769` start-play request (for this capture: `37946`)
+  - `u32le(payload[52:56])` is consistently `1` in observed records
+- Per-record varying fields:
+  - `u32le(payload[64:68])` and `u32le(payload[68:72])` vary per record and are a strong candidate for a per-record nonce/counter seed
 
 The (304, 157) split matches the known-good MP4's rough video/audio frame counts for this test video (304 video frames, 157 audio frames).
 
@@ -73,7 +78,7 @@ You added the camera's on-SD file:
 `ffprobe` summary:
 
 - Track 0: H.264 (avc1) 1920x1080, ~30 fps, `nb_frames=304`, duration `10.333s`
-- Track 1: H.264 (avc1) 320x176, `nb_frames=155`, duration ~`10.366s`
+- Track 1: H.264 (avc1) 320x176, `nb_frames=155`, duration `10.366s`
 - Track 2: AAC-LC audio, 16 kHz mono, `nb_frames=157`, duration `10.048s`
 
 This matches the control-plane response in the PCAP for start playback:
@@ -85,55 +90,93 @@ It also matches the *sizes* we see in `subtype=0x02` ver=4 payloads:
 - v16 family (data_len at offset 16): 304 records, total bytes ~6.52 MB
 - v20 family (data_len at offset 20): 157 records, total bytes ~80 KB
 
-For audio, the sizes line up exactly with ADTS overhead:
+For audio, we see a consistent per-record 7-byte overhead in the PCAP `v20` family, but the payload does **not** look like plain ADTS on the wire (it does not start with the ADTS syncword `0xFFF...`).
 
-- PCAP v20 total bytes: 80516
-- MP4 audio total bytes (raw AAC samples): 79417
-- 80516 - 79417 == 7 * 157 (one 7-byte ADTS header per AAC frame)
+Using `tools/compare_video_pcap_to_sd_mp4.py` to compare the PCAP record bytes to the SD MP4 sample bytes:
 
-This strongly suggests the playback stream is transporting per-sample audio/video frame payloads that are then converted and muxed into an MP4 by the native layer (see `libArLink.so`, `libMP4Codec.so`).
+- Audio: all 157 records satisfy `len(pcap_data[7:]) == len(mp4_sample)`, but `pcap_data[7:] != mp4_sample` for all frames.
+- Video: 298/304 frames match by size, but `pcap_data != mp4_sample` for all frames.
 
-## Current State: Not Yet Reconstructing A Valid MP4 From PCAP Alone
+Conclusion: the ver=4 `data` region is not a direct copy of MP4 sample bytes. There is an additional transform (most likely encryption) that we still need to reverse for live video download.
 
-We can reliably:
+## Decryption: What Makes PCAP Bytes Turn Into H.264/AAC
 
-- Extract and reassemble `subtype=0x02` and `subtype=0x03` streams by `seq16`
-- Parse strict ARTEMIS records
-- Split ver=4 records into the two families above
+We can now reconstruct a playable MP4 from the PCAP, without the app, by replicating the app's native decrypt step.
 
-We cannot yet:
+Key observations:
 
-- Convert the extracted video-like payload data into a clean H.264 Annex-B stream that decodes as 1920x1080
-- Mux a correct MP4 offline from PCAP data alone
+- Each `ver=4` record has a 108-byte header, then `data_len` bytes of "data".
+- That `data` is **mostly plaintext**, except:
+  - For each 0x1000 "page" of `data`, the first 0x60 bytes are AES-128-CBC encrypted.
+- Decrypt parameters (empirically verified against `pcap/DSCF0935.MP4`):
+  - AES key: ASCII string `"xs38nul7cqf7m1va"` (16 bytes)
+  - IV: 16 bytes of `0x00`
+  - Ciphertext length per page: 0x60 bytes (96 bytes), a multiple of 16.
 
-What this implies:
+What the decrypted output looks like:
 
-- Either the video payload is not a direct H.264 elementary stream, or it is H.264 but requires an additional native deframing/decryption step that we have not replicated yet.
+- Video-like records (`data_len_off=16`, width/height set):
+  - Decrypting the page-prefix bytes yields an Annex-B H.264 bytestream (`00 00 00 01` / `00 00 01` start codes).
+  - This is why raw byte comparisons against MP4 `avc1` samples do not match: MP4 stores H.264 in length-prefixed (AVCC) form, while the camera stream is Annex-B.
+- Audio-like records (`data_len_off=20`, width/height 0):
+  - Decrypting the page-prefix bytes yields ADTS AAC frames (starts with `0xFF F9 ...`).
+  - MP4 samples store raw AAC without ADTS headers, so the camera stream appears to add a 7-byte ADTS header.
+
+## Current State: Reconstructing A Valid MP4 From PCAP (Main Video + Audio)
+
+From `pcap/trailcam_8-3-view-and-download-video.pcap`, we can reconstruct:
+
+- 1920x1080 H.264 track (304 frames)
+- AAC-LC audio track 16 kHz mono (157 frames)
+
+This matches the MP4's track 0 and track 2.
+
+What we are not reconstructing yet (for full parity with the SD-card MP4):
+
+- The additional low-res H.264 track (320x176, 155 frames) present as track 1 in `pcap/DSCF0935.MP4`.
+  - Hypothesis: this comes from a different D0 subtype stream (likely `subtype=0x03`) and needs similar extraction/decrypt logic.
 
 ## Tooling
 
 The current extractor is:
 
 - `tools/extract_video_from_pcap.py`
+- `tools/compare_video_pcap_to_sd_mp4.py` (byte/size comparison against an SD-card MP4 oracle)
 
 Example:
 
 ```bash
 python3 tools/extract_video_from_pcap.py \
   pcap/trailcam_8-3-view-and-download-video.pcap \
-  --out-dir out/video_extract6 \
-  --v4-header
+  --out-dir out/video_extract8 \
+  --subtypes 0x02 \
+  --v4-header \
+  --v4-decrypt \
+  --mux \
+  --fps 30
 ```
 
 It will write:
 
-- `out/video_extract6/trailcam_8-3-view-and-download-video/subtype_02_v4_records.csv`
-- `out/video_extract6/trailcam_8-3-view-and-download-video/subtype_02_concat_v4_data.bin`
-- `out/video_extract6/trailcam_8-3-view-and-download-video/subtype_02_records/record_*.bin`
+- `out/video_extract8/trailcam_8-3-view-and-download-video/subtype_02_v4_records.csv`
+- `out/video_extract8/trailcam_8-3-view-and-download-video/subtype_02_v4_decrypted.h264`
+- `out/video_extract8/trailcam_8-3-view-and-download-video/subtype_02_v4_decrypted.aac`
+- `out/video_extract8/trailcam_8-3-view-and-download-video/subtype_02_v4_decrypted_fps30.mp4`
+- `out/video_extract8/trailcam_8-3-view-and-download-video/subtype_02_records/record_*.bin`
+
+Comparison CSV (example):
+
+```bash
+python3 tools/compare_video_pcap_to_sd_mp4.py \
+  --records-csv out/video_extract6/trailcam_8-3-view-and-download-video/subtype_02_v4_records.csv \
+  --records-dir out/video_extract6/trailcam_8-3-view-and-download-video/subtype_02_records \
+  --mp4 pcap/DSCF0935.MP4 \
+  --out-csv out/video_compare/dscf0935_sub02_compare.csv
+```
 
 ## Next Steps For Video (Likely Required)
 
 If we want video parity without relying on the phone app, we likely need one of:
 
-1. Reverse the native stream path in `apk/apk_unzip_v2_armeabi/lib/armeabi-v7a/libArLink.so` to replicate the deframing/decryption into H.264/AAC.
-2. Instrument the Android app (Frida / debug build) to dump the post-processed bytes handed to `ArLinkApi.ArLinkPlaybackStreamCallback.receiveVideoStream()` and `receiveAudioStream()`, then derive the transformation back to PCAP bytes.
+1. Extract and decrypt the low-res 320x176 H.264 track (track 1 in `pcap/DSCF0935.MP4`) from the capture, likely from `D0 subtype=0x03`.
+2. Move this decryption logic into the live client flow so the Python client can save `*.mp4` videos directly (not only offline PCAP tooling).

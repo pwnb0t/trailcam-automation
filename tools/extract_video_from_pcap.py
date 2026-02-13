@@ -34,6 +34,9 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 F1_MAGIC = 0xF1
 ARTEMIS_MAGIC = b"ARTEMIS\x00"
+AES_V4_KEY_DEFAULT = "xs38nul7cqf7m1va"
+V4_PAGE_SIZE = 0x1000
+V4_CBC_CRYPT_LEN = 0x60
 
 
 def _tshark_rows(pcap: str, src: str, dst: str) -> Iterable[Tuple[int, bytes]]:
@@ -188,6 +191,9 @@ class ArtemisV4Header:
     width: int
     height: int
     data_len_off: int
+    session_no: int
+    seed_u32_0: int
+    seed_u32_1: int
 
 
 def _u32le(b: bytes) -> int:
@@ -220,6 +226,9 @@ def parse_artemis_v4_header(payload: bytes) -> Optional[ArtemisV4Header]:
     pts_ms = _u32le(payload[8:12])
     width = _u32le(payload[28:32])
     height = _u32le(payload[32:36])
+    session_no = _u32le(payload[48:52]) if len(payload) >= 56 else 0
+    seed_u32_0 = _u32le(payload[64:68]) if len(payload) >= 72 else 0
+    seed_u32_1 = _u32le(payload[68:72]) if len(payload) >= 72 else 0
     return ArtemisV4Header(
         header_len=header_len,
         pts_ms=pts_ms,
@@ -227,7 +236,69 @@ def parse_artemis_v4_header(payload: bytes) -> Optional[ArtemisV4Header]:
         width=width,
         height=height,
         data_len_off=data_len_off,
+        session_no=session_no,
+        seed_u32_0=seed_u32_0,
+        seed_u32_1=seed_u32_1,
     )
+
+
+def _aes_128_cbc_decrypt(key16: bytes, iv16: bytes, data: bytes) -> bytes:
+    # Selectively decrypting ver=4 record data requires AES-CBC. We use cryptography if available.
+    try:
+        from cryptography.hazmat.backends import default_backend
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError(
+            "AES decrypt requires python 'cryptography' package (pip install cryptography)."
+        ) from e
+
+    if len(key16) != 16 or len(iv16) != 16:
+        raise ValueError("AES-128-CBC requires 16-byte key and 16-byte IV")
+    if len(data) % 16 != 0:
+        raise ValueError("AES-CBC decrypt input must be a multiple of 16 bytes")
+
+    cipher = Cipher(algorithms.AES(key16), modes.CBC(iv16), backend=default_backend())
+    dec = cipher.decryptor()
+    return dec.update(data) + dec.finalize()
+
+
+def decrypt_v4_data_in_pages(
+    data: bytes,
+    *,
+    key16: bytes,
+    iv16: bytes,
+    page_size: int = V4_PAGE_SIZE,
+    crypt_len: int = V4_CBC_CRYPT_LEN,
+) -> bytes:
+    """Decrypt ver=4 record data as observed in trailcam_8-3 view/download-video.
+
+    Empirical:
+    - Data is mostly plaintext.
+    - At the start of each 0x1000 page, the first 0x60 bytes are AES-128-CBC encrypted.
+    - The remaining bytes in the page are plaintext.
+
+    We decrypt only full `crypt_len` chunks; if the tail is shorter, we decrypt the
+    largest multiple-of-16 prefix and leave the remainder untouched.
+    """
+    if page_size <= 0 or crypt_len <= 0:
+        return data
+    if crypt_len % 16 != 0:
+        raise ValueError("crypt_len must be a multiple of 16 bytes for AES-CBC")
+
+    out = bytearray(data)
+    for off in range(0, len(out), page_size):
+        chunk = bytes(out[off : off + crypt_len])
+        if not chunk:
+            continue
+        if len(chunk) < 16:
+            continue
+        if len(chunk) % 16 != 0:
+            chunk = chunk[: (len(chunk) // 16) * 16]
+        if len(chunk) <= 0:
+            continue
+        dec = _aes_128_cbc_decrypt(key16, iv16, chunk)
+        out[off : off + len(dec)] = dec
+    return bytes(out)
 
 
 def _looks_like_annexb_h264(data: bytes) -> bool:
@@ -430,6 +501,36 @@ def try_ffmpeg_mux(h264_path: Path, mp4_path: Path, fps: int) -> bool:
     return p.returncode == 0 and mp4_path.exists() and mp4_path.stat().st_size > 0
 
 
+def try_ffmpeg_mux_h264_aac(
+    h264_path: Path,
+    aac_adts_path: Path,
+    mp4_path: Path,
+    fps: int,
+) -> bool:
+    if shutil.which("ffmpeg") is None:
+        return False
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-r",
+        str(fps),
+        "-i",
+        str(h264_path),
+        "-i",
+        str(aac_adts_path),
+        "-c",
+        "copy",
+        "-bsf:a",
+        "aac_adtstoasc",
+        str(mp4_path),
+    ]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    return p.returncode == 0 and mp4_path.exists() and mp4_path.stat().st_size > 0
+
+
 def _parse_annexb_nals(stream: bytes) -> List[bytes]:
     """Split an Annex-B bytestream into NAL units (without start codes)."""
     nals: List[bytes] = []
@@ -506,7 +607,21 @@ def main() -> int:
         action="store_true",
         help="For ver=4 ARTEMIS records, parse and strip the 108-byte header and use header data_len",
     )
+    ap.add_argument(
+        "--v4-decrypt",
+        action="store_true",
+        help=f"Decrypt ver=4 record data (AES-128-CBC, key={AES_V4_KEY_DEFAULT!r}, per-0x1000-page first-0x60 bytes). Requires --v4-header.",
+    )
+    ap.add_argument(
+        "--v4-aes-key",
+        default=AES_V4_KEY_DEFAULT,
+        help="AES key for --v4-decrypt (default: %(default)s)",
+    )
     args = ap.parse_args()
+
+    if args.v4_decrypt and not args.v4_header:
+        print("--v4-decrypt requires --v4-header (so we can locate ver=4 record data accurately).")
+        return 2
 
     pcap = args.pcap
     if not os.path.exists(pcap):
@@ -566,6 +681,8 @@ def main() -> int:
         v4_meta_lines: List[str] = []
         v4_hdr_ok = 0
         v4_hdr_fail = 0
+        v4_video_annexb = bytearray()
+        v4_audio_adts = bytearray()
         for idx, (_off, ver, typ, payload) in enumerate(recs, 1):
             if len(payload) > 72:
                 concat_guess72 += payload[72:]
@@ -580,12 +697,31 @@ def main() -> int:
                 continue
             v4_hdr_ok += 1
             data = payload[hdr.header_len : hdr.header_len + hdr.data_len]
+
+            # Optional decrypt of the page-prefix bytes. For t8_3 video playback/download, this
+            # transforms the data into something ffmpeg can consume (video becomes Annex-B H.264,
+            # audio becomes ADTS AAC).
+            if args.v4_decrypt:
+                key16 = args.v4_aes_key.encode("ascii", errors="strict")
+                iv16 = b"\x00" * 16
+                data = decrypt_v4_data_in_pages(data, key16=key16, iv16=iv16)
+
             concat_data_v4 += data
             kind = "unknown"
             if hdr.data_len_off == 16:
                 kind = "v16_video_like"
             elif hdr.data_len_off == 20:
                 kind = "v20_small_like"
+
+            # For subtype=0x02, t8_3 ver=4 records appear to alternate between:
+            # - video-like records (width/height set, data_len_off=16) containing Annex-B H.264
+            # - audio-like records (width/height 0, data_len_off=20) containing ADTS AAC frames
+            if args.v4_decrypt and ver == 4:
+                if kind == "v16_video_like":
+                    v4_video_annexb += data
+                elif kind == "v20_small_like":
+                    v4_audio_adts += data
+
             v4_meta_lines.append(
                 ",".join(
                     [
@@ -596,6 +732,10 @@ def main() -> int:
                         str(hdr.data_len),
                         str(hdr.width),
                         str(hdr.height),
+                        str(hdr.session_no),
+                        str(hdr.seed_u32_0),
+                        str(hdr.seed_u32_1),
+                        str(hdr.data_len_off),
                         kind,
                     ]
                 )
@@ -617,7 +757,7 @@ def main() -> int:
             summary[f"subtype_{st:02x}_v4_header_fail"] = v4_hdr_fail
             meta_path = out_root / f"subtype_{st:02x}_v4_records.csv"
             meta_path.write_text(
-                "record_idx,typ,payload_len,pts_ms,data_len,width,height,kind\n"
+                "record_idx,typ,payload_len,pts_ms,data_len,width,height,session_no,seed_u32_0,seed_u32_1,data_len_off,kind\n"
                 + "\n".join(v4_meta_lines)
                 + ("\n" if v4_meta_lines else "")
             )
@@ -758,6 +898,24 @@ def main() -> int:
             mp4_path = out_root / f"{src_h264.stem}_fps{args.fps}.mp4"
             ok = try_ffmpeg_mux(src_h264, mp4_path, fps=args.fps)
             summary[f"mux_{src_h264.name}"] = {"ok": ok, "mp4": str(mp4_path)}
+
+        # If we decrypted ver=4 records, write the derived elementary streams and optionally mux.
+        if args.v4_decrypt and v4_video_annexb:
+            h264p = out_root / f"subtype_{st:02x}_v4_decrypted.h264"
+            h264p.write_bytes(bytes(v4_video_annexb))
+            summary[f"subtype_{st:02x}_v4_decrypted_h264_bytes"] = len(v4_video_annexb)
+            summary[f"subtype_{st:02x}_v4_decrypted_h264_path"] = str(h264p)
+
+            if v4_audio_adts:
+                aacp = out_root / f"subtype_{st:02x}_v4_decrypted.aac"
+                aacp.write_bytes(bytes(v4_audio_adts))
+                summary[f"subtype_{st:02x}_v4_decrypted_aac_bytes"] = len(v4_audio_adts)
+                summary[f"subtype_{st:02x}_v4_decrypted_aac_path"] = str(aacp)
+
+                if args.mux:
+                    mp4p = out_root / f"subtype_{st:02x}_v4_decrypted_fps{args.fps}.mp4"
+                    ok = try_ffmpeg_mux_h264_aac(h264p, aacp, mp4p, fps=args.fps)
+                    summary[f"mux_{mp4p.name}"] = {"ok": ok, "mp4": str(mp4p)}
 
     summary_path = out_root / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
