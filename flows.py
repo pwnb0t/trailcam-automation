@@ -282,7 +282,6 @@ def send_photo_download_flow(
     dir_num: int,
     media_num: int,
     file_type: int = 0,
-    art_typ: int = 7,
     listen_s: float = 45.0,
     idle_break_s: float = 4.0,
     dump_dir: str = "out/download",
@@ -293,8 +292,9 @@ def send_photo_download_flow(
 
     Notes:
     - Uses app-like command shape: {"cmdId":1285,"downloadReqs":[...],"token":...}
-    - Uses ARTEMIS type 7 by default (seen in trailcam_10).
+    - Uses ARTEMIS type 7 (seen in trailcam_10).
     """
+    art_typ = 7
     req = {
         "cmdId": 1285,
         "downloadReqs": [{"fileType": file_type, "dirNum": dir_num, "mediaNum": media_num}],
@@ -1079,7 +1079,6 @@ def download_photo_page(
     item_cnt_per_page: int = 45,
     limit: int = 12,
     out_root: str = "out/media",
-    art_typ: int = 7,
     listen_s: float = 45.0,
     idle_break_s: float = 4.0,
     debug: bool = False,
@@ -1119,7 +1118,6 @@ def download_photo_page(
             dir_num=dir_num,
             media_num=media_num,
             file_type=0,
-            art_typ=art_typ,
             listen_s=listen_s,
             idle_break_s=idle_break_s,
             dump_dir=str(media_dir),
@@ -1150,7 +1148,6 @@ def download_media_page(
     page_no: int = 0,
     item_cnt_per_page: int = 45,
     out_root: str = "out/media",
-    art_typ: int = 7,
     listen_s: float = 75.0,
     idle_break_s: float = 2.0,
     video_fps: int = 30,
@@ -1190,7 +1187,6 @@ def download_media_page(
             dir_num=dir_num,
             media_num=media_num,
             file_type=0,
-            art_typ=art_typ,
             listen_s=listen_s,
             idle_break_s=idle_break_s,
             dump_dir=str(media_dir),
