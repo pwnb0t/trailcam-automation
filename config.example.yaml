@@ -1,0 +1,29 @@
+version: 1
+
+# Cameras can be referenced by alias (e.g. --camera front).
+cameras:
+  front:
+    ble_address: "C6:1E:0D:E0:0C:FB"
+    ssid: "TrailCam_5DBD"
+
+# Defaults are used unless overridden on the CLI.
+defaults:
+  wifi_ifname: "wlan0"
+  udp_local_port: 16734
+
+  page_item_cnt: 45
+  list_max_pages: 200
+
+  download_listen_s: 45.0
+  download_idle_s: 4.0
+
+  video_fps: 30
+
+paths:
+  media_out_dir: "out/media"
+  tmp_dir: "out/tmp"
+
+  # Future: optional NAS integration (staging -> final)
+  # staging_dir: "/mnt/trailcam/staging"
+  # final_media_dir: "/mnt/trailcam/media"
+
