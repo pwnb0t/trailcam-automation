@@ -1,5 +1,14 @@
 Summaries of certain pcap files.
 
+# trailcam_8-3-view-and-download-video.pcap
+
+From pcap/trailcam_8-3-view-and-download-video.pcap, the app’s start playback request (cmdId=769) is in frame 1715 and decrypts to:
+  - fileType: 1 (video)
+  - dirNum: 102
+  - mediaNum: 935
+  - sessionNo: 37946
+
+I stored the original DSCF0935.MPG in the folder as a sibling.
 
 
 # trailcam_9-connect-thru-download-photo.pcap
@@ -25,6 +34,7 @@ Pixels: 5120x2880 (14.7 MP)
 
 Photo is stored in this folder along side trailcam_9 pcap.
 
+I have now stored DSCF0938.JPG in this folder along side.
 
 
 # trailcam_10-connect-thru-download-photo.pcap
@@ -35,3 +45,5 @@ Photo downloaded from the app: DSCF0940.JPG
 Stored: /storage/emulated/0/DCIM/TrailCam Go/TrailCam Go-Images/2026-02-11_12.51.46.448_CC164BCE.jpg
 Size: 5.4 MB
 Pixels: 5120x2880 (14.7 MP)
+
+I have now stored DSCF0940.JPG in this folder along side.
