@@ -9,13 +9,27 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. Use the new AppConfig (config.py) class throughout the app.
- 
-2. Connection logic (partly done I think in connection.py, but I'm not sure I see it being used)
+1. App restructure
+* Use the new AppConfig (config.py) class throughout the app.
+
+* Connection logic (partly done I think in connection.py, but I'm not sure I see it being used)
   * Currently does BLE wake -> AP join -> UDP handshake -> login.
   * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
   * In this case, it should instead go back to BLE wake.
   * I would like it if all of this was contained in its own class/step before moving forward.
+
+# here's an example look of what I mean by app restructure
+async def main():
+  cfg = parse_env_and_args_to_config()
+  session = await connect_and_login(cfg)
+  if cfg.download_page: # (or maybe cfg.op.download_page)
+    cmd = DownloadMediaPageCommand(session) # session should contain all the required info needed; the Command class validates that.
+    #cmd.validate() # potentially run the validation here instead if that makes more sense. Ensure it has all the necessary info to run.
+    results = cmd.run()
+    results = download_media_page(session)
+    # print results like before
+
+
 
 
 

@@ -4,6 +4,8 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/pcap" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/historical" />
+      <excludeFolder url="file://$MODULE_DIR$/old_scripts" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.10 (trailcam-automation)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
