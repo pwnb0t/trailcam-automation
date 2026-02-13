@@ -22,6 +22,9 @@ from flows import (
     send_video_download_flow,
     wifi_has_camera_ip,
 )
+from config import CameraConfig, DefaultsConfig, PathsConfig
+from session import TrailCamSession
+from commands import DownloadMediaPageCommand
 
 
 async def main():
@@ -280,17 +283,26 @@ async def main():
             return
 
         if args.download_page:
-            results = download_media_page(
-                client,
-                token,
-                page_no=args.page_no,
-                item_cnt_per_page=args.page_item_cnt,
-                out_root=args.media_out_dir,
-                listen_s=args.download_listen_s,
-                idle_break_s=args.download_idle_s,
-                video_fps=args.video_fps,
-                debug=args.debug,
+            session = TrailCamSession(
+                camera=CameraConfig(alias="cli", ble_address=args.ble_address, ssid=args.ssid),
+                defaults=DefaultsConfig(
+                    wifi_ifname=args.ifname,
+                    udp_local_port=args.port,
+                    page_no=args.page_no,
+                    page_item_cnt=args.page_item_cnt,
+                    list_max_pages=args.list_max_pages,
+                    download_listen_s=args.download_listen_s,
+                    download_idle_s=args.download_idle_s,
+                    video_fps=args.video_fps,
+                ),
+                paths=PathsConfig(media_out_dir=args.media_out_dir, tmp_dir="out/tmp"),
+                client=client,
+                login_token_u32=token,
+                wifi_ssid=args.ssid,
+                wifi_pwd=None,
             )
+            cmd = DownloadMediaPageCommand(session, debug=args.debug)
+            results = cmd.run()
             print(f"Downloaded page results: {len(results)} item(s)")
             for r in results:
                 kind = r.get("kind", "media")

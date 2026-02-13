@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from client import TrailCamClient
 from constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
+from session import TrailCamSession
 from protocol import (
     decrypt_artemis_json,
     decrypt_cmd_b64,
@@ -1188,18 +1189,27 @@ def download_photo_page(
 
 
 def download_media_page(
-    client: TrailCamClient,
-    token: int,
-    page_no: int = 0,
-    item_cnt_per_page: int = 45,
-    out_root: str = "out/media",
-    listen_s: float = 75.0,
-    idle_break_s: float = 2.0,
-    video_fps: int = 30,
-    temp_root: str = "out/tmp",
+    session: TrailCamSession,
     debug: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Download all media entries returned in a single media-list page."""
+    """Download all media entries returned in a single media-list page.
+
+    This consumes all runtime and default settings from the session.
+    """
+    client = session.client
+    token = int(session.login_token_u32)
+    page_no = int(session.defaults.page_no)
+    item_cnt_per_page = int(session.defaults.page_item_cnt)
+    out_root = str(session.paths.media_out_dir)
+    temp_root = str(session.paths.tmp_dir)
+    listen_s = float(session.defaults.download_listen_s)
+    idle_break_s = float(session.defaults.download_idle_s)
+    video_fps = int(session.defaults.video_fps)
+
+    # Camera returns an error if itemCntPerPage >= 50 ("need less than 50").
+    if item_cnt_per_page >= 50:
+        item_cnt_per_page = 45
+
     entries = fetch_media_list_page(
         client,
         token,
