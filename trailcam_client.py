@@ -150,6 +150,11 @@ async def main():
     ):
         raise SystemExit("--dir-num/--media-num are only valid with --download-photo or --download-video")
 
+    # Camera returns an error if itemCntPerPage >= 50 ("need less than 50").
+    if (args.download_page or args.list_media_page or args.list_media_all) and args.page_item_cnt >= 50:
+        print(f"Warning: camera rejects --page-item-cnt >= 50; clamping {args.page_item_cnt} -> 45")
+        args.page_item_cnt = 45
+
     # If already connected to the camera AP, skip BLE wake/connect work.
     already_connected = False
     nmcli_rescan()

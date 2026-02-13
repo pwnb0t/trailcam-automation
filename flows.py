@@ -896,6 +896,7 @@ def fetch_media_list_page(
 
     entries: List[Dict[str, Any]] = []
     seen_keys: set[tuple[int, int, int]] = set()
+    last_media_list_error: Optional[str] = None
     stop_hb = threading.Event()
 
     def hb_loop():
@@ -953,6 +954,8 @@ def fetch_media_list_page(
                                 continue
                             if debug:
                                 print("RX JSON media list:", obj)
+                            if obj.get("cmdId") == 768 and obj.get("getMediaListRet") not in (None, 0):
+                                last_media_list_error = str(obj.get("errorMsg") or obj)
                             found: List[Dict[str, Any]] = []
                             _collect_media_entries(obj, found)
                             for ent in found:
@@ -966,6 +969,8 @@ def fetch_media_list_page(
                                 entries.append(norm)
                 for obj in client.handle_incoming_payload(data):
                     # Some responses may arrive via generic JSON path.
+                    if obj.get("cmdId") == 768 and obj.get("getMediaListRet") not in (None, 0):
+                        last_media_list_error = str(obj.get("errorMsg") or obj)
                     found: List[Dict[str, Any]] = []
                     _collect_media_entries(obj, found)
                     for ent in found:
@@ -987,6 +992,8 @@ def fetch_media_list_page(
                         continue
                     if debug:
                         print("RX JSON media list (assembled):", obj)
+                    if obj.get("cmdId") == 768 and obj.get("getMediaListRet") not in (None, 0):
+                        last_media_list_error = str(obj.get("errorMsg") or obj)
                     found: List[Dict[str, Any]] = []
                     _collect_media_entries(obj, found)
                     for ent in found:
@@ -1004,6 +1011,8 @@ def fetch_media_list_page(
     finally:
         stop_hb.set()
 
+    if not entries and last_media_list_error:
+        print(f"Media list error: {last_media_list_error}")
     return entries
 
 
