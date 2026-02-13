@@ -11,6 +11,7 @@ defaults:
   wifi_ifname: "wlan0"
   udp_local_port: 16734
 
+  page_no: 0
   page_item_cnt: 45
   list_max_pages: 200
 

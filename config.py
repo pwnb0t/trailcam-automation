@@ -49,6 +49,7 @@ class DefaultsConfig:
     wifi_ifname: str = WIFI_IFNAME
     udp_local_port: int = LOCAL_PORT
 
+    page_no: int = 0
     page_item_cnt: int = 45
     list_max_pages: int = 200
 
@@ -113,6 +114,7 @@ def load_config(path: str | Path) -> AppConfig:
     d = DefaultsConfig(
         wifi_ifname=str(defaults_raw.get("wifi_ifname", WIFI_IFNAME)),
         udp_local_port=_must_int(defaults_raw.get("udp_local_port", LOCAL_PORT), "defaults.udp_local_port"),
+        page_no=_must_int(defaults_raw.get("page_no", 0), "defaults.page_no"),
         page_item_cnt=_must_int(defaults_raw.get("page_item_cnt", 45), "defaults.page_item_cnt"),
         list_max_pages=_must_int(defaults_raw.get("list_max_pages", 200), "defaults.list_max_pages"),
         download_listen_s=_must_float(defaults_raw.get("download_listen_s", 45.0), "defaults.download_listen_s"),
