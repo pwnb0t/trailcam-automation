@@ -43,6 +43,12 @@
   * front_YYYYMMDD_HHMMSS.jpg, back_20260213_132127.mp4, ...
   * Split by week: /mnt/trailcam/media/YYYY-WW/front_YYYYMMDD_HHMMSS.jpg
 
+* Connection logic
+  * Currently does BLE wake -> AP join -> UDP handshake -> login.
+  * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
+  * In this case, it should instead go back to BLE wake.
+  * I would like it if all of this was contained in its own class/step before moving forward.
+
 * Code reorg
   * Rename trailcam_client.py to trailcam_client_runner.py
   * Add trailcam_sync.py (orchestrator)
