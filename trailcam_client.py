@@ -10,6 +10,9 @@ from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
 from ble import ble_wake_and_get_creds
 from flows import (
     download_photo_page,
+    download_media_page,
+    fetch_media_list_all,
+    fetch_media_list_page,
     handshake_prelude,
     login_and_get_token,
     nmcli_connect,
@@ -78,6 +81,22 @@ async def main():
         help="After login, fetch one media-list page and download the newest photo entries",
     )
     parser.add_argument(
+        "--list-media-page",
+        action="store_true",
+        help="After login, fetch one media-list page and print entries",
+    )
+    parser.add_argument(
+        "--list-media-all",
+        action="store_true",
+        help="After login, page through media list and print entries until stop condition",
+    )
+    parser.add_argument(
+        "--list-max-pages",
+        type=int,
+        default=200,
+        help="Maximum pages to request when using --list-media-all (default: %(default)s)",
+    )
+    parser.add_argument(
         "--page-no",
         type=int,
         default=0,
@@ -94,6 +113,12 @@ async def main():
         type=int,
         default=12,
         help="Maximum photos to download from fetched page (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--page-video-limit",
+        type=int,
+        default=0,
+        help="Maximum videos to download from fetched page when using --download-page (default: %(default)s)",
     )
     parser.add_argument(
         "--media-out-dir",
@@ -290,24 +315,55 @@ async def main():
                     debug=args.debug,
                 )
             if args.download_page:
-                results = download_photo_page(
+                results = download_media_page(
                     client,
                     token,
                     page_no=args.page_no,
                     item_cnt_per_page=args.page_item_cnt,
-                    limit=args.page_download_limit,
+                    photo_limit=args.page_download_limit,
+                    video_limit=args.page_video_limit,
                     out_root=args.media_out_dir,
                     art_typ=args.download_art_typ,
                     listen_s=args.download_listen_s,
                     idle_break_s=args.download_idle_s,
+                    video_fps=args.video_fps,
                     debug=args.debug,
                 )
                 print(f"Downloaded page results: {len(results)} item(s)")
                 for r in results:
+                    kind = r.get("kind", "media")
+                    path = r.get("path")
+                    print(f"  {kind} dir={r.get('dirNum')} media={r.get('mediaNum')} path={path or 'none'}")
+            if args.list_media_page:
+                page = fetch_media_list_page(
+                    client,
+                    token,
+                    page_no=args.page_no,
+                    item_cnt_per_page=args.page_item_cnt,
+                    debug=args.debug,
+                )
+                print(f"Media entries (page {args.page_no}): {len(page)}")
+                for e in page:
                     print(
-                        f"  dir={r['dirNum']} media={r['mediaNum']} "
-                        f"jpeg={r['best_jpeg'] or 'none'} out={r['dump_dir']}"
+                        f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "
+                        f"name={e.get('fileName') or ''} time={e.get('mediaTime') or ''} durMs={e.get('durationMs') or ''}"
                     )
+                return
+            if args.list_media_all:
+                all_entries = fetch_media_list_all(
+                    client,
+                    token,
+                    item_cnt_per_page=args.page_item_cnt,
+                    max_pages=args.list_max_pages,
+                    debug=args.debug,
+                )
+                print(f"Media entries (all): {len(all_entries)}")
+                for e in all_entries:
+                    print(
+                        f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "
+                        f"name={e.get('fileName') or ''} time={e.get('mediaTime') or ''} durMs={e.get('durationMs') or ''}"
+                    )
+                return
 
     finally:
         client.close()

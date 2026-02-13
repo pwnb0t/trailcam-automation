@@ -804,6 +804,61 @@ def _collect_media_entries(node: Any, out: List[Dict[str, Any]]) -> None:
             _collect_media_entries(item, out)
 
 
+def normalize_media_entry(ent: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return a canonical media entry dict with stable keys.
+
+    We see a few different shapes in the media list responses. For client logic we want:
+    - dirNum (int)
+    - mediaNum (int)
+    - fileType (int, 0=photo, 1=video)
+    Plus optional fields when present: fileName, mediaTime, durationMs, mediaId.
+    """
+    try:
+        dir_num = ent.get("dirNum", ent.get("mediaDirNum"))
+        media_num = ent.get("mediaNum")
+        if dir_num is None or media_num is None:
+            return None
+        dir_num_i = int(dir_num)
+        media_num_i = int(media_num)
+    except Exception:
+        return None
+
+    file_type = ent.get("fileType")
+    try:
+        if file_type is None:
+            # Fall back to filename hints if present.
+            name = str(ent.get("fileName") or ent.get("name") or "").upper()
+            if name.endswith(".MP4") or name.endswith(".AVI"):
+                file_type_i = 1
+            else:
+                file_type_i = 0
+        else:
+            file_type_i = int(file_type)
+    except Exception:
+        file_type_i = 0
+
+    out: Dict[str, Any] = {"dirNum": dir_num_i, "mediaNum": media_num_i, "fileType": file_type_i}
+    for k in ("fileName", "mediaTime", "durationMs", "mediaId", "mediaType"):
+        if k in ent:
+            out[k] = ent[k]
+    return out
+
+
+def _is_video_entry(entry: Dict[str, Any]) -> bool:
+    file_type = entry.get("fileType")
+    if isinstance(file_type, int):
+        return file_type == 1
+    if isinstance(file_type, str) and file_type.isdigit():
+        return int(file_type) == 1
+
+    name = str(entry.get("fileName") or entry.get("name") or "").upper()
+    if name.endswith(".MP4") or name.endswith(".AVI"):
+        return True
+    if name.endswith(".JPG") or name.endswith(".JPEG"):
+        return False
+    return False
+
+
 def _is_photo_entry(entry: Dict[str, Any]) -> bool:
     file_type = entry.get("fileType")
     if isinstance(file_type, int):
@@ -840,7 +895,7 @@ def fetch_media_list_page(
     thumb_cmd = {"cmdId": 772, "thumbnailReqs": thumb_reqs, "token": token}
 
     entries: List[Dict[str, Any]] = []
-    seen_keys: set[tuple[int, int]] = set()
+    seen_keys: set[tuple[int, int, int]] = set()
     stop_hb = threading.Event()
 
     def hb_loop():
@@ -901,29 +956,27 @@ def fetch_media_list_page(
                             found: List[Dict[str, Any]] = []
                             _collect_media_entries(obj, found)
                             for ent in found:
-                                try:
-                                    dir_num = ent.get("dirNum", ent.get("mediaDirNum"))
-                                    key = (int(dir_num), int(ent.get("mediaNum")))
-                                except Exception:
+                                norm = normalize_media_entry(ent)
+                                if not norm:
                                     continue
+                                key = (norm["dirNum"], norm["mediaNum"], int(norm.get("fileType", 0)))
                                 if key in seen_keys:
                                     continue
                                 seen_keys.add(key)
-                                entries.append(ent)
+                                entries.append(norm)
                 for obj in client.handle_incoming_payload(data):
                     # Some responses may arrive via generic JSON path.
                     found: List[Dict[str, Any]] = []
                     _collect_media_entries(obj, found)
                     for ent in found:
-                        try:
-                            dir_num = ent.get("dirNum", ent.get("mediaDirNum"))
-                            key = (int(dir_num), int(ent.get("mediaNum")))
-                        except Exception:
+                        norm = normalize_media_entry(ent)
+                        if not norm:
                             continue
+                        key = (norm["dirNum"], norm["mediaNum"], int(norm.get("fileType", 0)))
                         if key in seen_keys:
                             continue
                         seen_keys.add(key)
-                        entries.append(ent)
+                        entries.append(norm)
             if seq0_fragments:
                 assembled_seq0 = b"".join(seq0_fragments[k] for k in sorted(seq0_fragments))
                 for ver, typ, payload in parse_artemis_records(assembled_seq0):
@@ -937,15 +990,14 @@ def fetch_media_list_page(
                     found: List[Dict[str, Any]] = []
                     _collect_media_entries(obj, found)
                     for ent in found:
-                        try:
-                            dir_num = ent.get("dirNum", ent.get("mediaDirNum"))
-                            key = (int(dir_num), int(ent.get("mediaNum")))
-                        except Exception:
+                        norm = normalize_media_entry(ent)
+                        if not norm:
                             continue
+                        key = (norm["dirNum"], norm["mediaNum"], int(norm.get("fileType", 0)))
                         if key in seen_keys:
                             continue
                         seen_keys.add(key)
-                        entries.append(ent)
+                        entries.append(norm)
 
             if entries:
                 break
@@ -953,6 +1005,71 @@ def fetch_media_list_page(
         stop_hb.set()
 
     return entries
+
+
+def fetch_media_list_all(
+    client: TrailCamClient,
+    token: int,
+    item_cnt_per_page: int = 45,
+    max_pages: int = 200,
+    stop_on_repeat_pages: int = 2,
+    stop_on_no_new_pages: int = 2,
+    debug: bool = False,
+) -> List[Dict[str, Any]]:
+    """Fetch pages until empty or repeated content.
+
+    We stop if:
+    - A page returns no entries, or
+    - We observe the exact same set of (dirNum, mediaNum, fileType) for N consecutive pages.
+    - We observe N consecutive pages with no new keys compared to previous pages.
+    """
+    all_entries: List[Dict[str, Any]] = []
+    seen: set[tuple[int, int, int]] = set()
+    last_page_keys: Optional[set[tuple[int, int, int]]] = None
+    repeat_pages = 0
+    no_new_pages = 0
+
+    for page_no in range(0, max_pages):
+        page = fetch_media_list_page(
+            client,
+            token,
+            page_no=page_no,
+            item_cnt_per_page=item_cnt_per_page,
+            debug=debug,
+        )
+        if not page:
+            break
+
+        keys = {(e["dirNum"], e["mediaNum"], int(e.get("fileType", 0))) for e in page}
+        new_keys = keys - seen
+        if not new_keys:
+            no_new_pages += 1
+        else:
+            no_new_pages = 0
+        if debug:
+            print(
+                f"Media list page {page_no}: entries={len(page)} new={len(new_keys)} "
+                f"repeat_pages={repeat_pages} no_new_pages={no_new_pages}"
+            )
+
+        if last_page_keys is not None and keys == last_page_keys:
+            repeat_pages += 1
+        else:
+            repeat_pages = 0
+        last_page_keys = keys
+        if repeat_pages >= stop_on_repeat_pages:
+            break
+        if no_new_pages >= stop_on_no_new_pages:
+            break
+
+        for e in page:
+            k = (e["dirNum"], e["mediaNum"], int(e.get("fileType", 0)))
+            if k in seen:
+                continue
+            seen.add(k)
+            all_entries.append(e)
+
+    return all_entries
 
 
 def download_photo_page(
@@ -992,7 +1109,9 @@ def download_photo_page(
     for idx, entry in enumerate(photos, start=1):
         dir_num = int(entry.get("dirNum", entry.get("mediaDirNum")))
         media_num = int(entry.get("mediaNum"))
-        media_dir = root / f"{dir_num}_{media_num}"
+        out_dir = root / f"dir{dir_num}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        media_dir = out_dir / f"media{media_num}"
         print(f"[{idx}/{len(photos)}] dir={dir_num} media={media_num}")
         res = send_photo_download_flow(
             client,
@@ -1006,6 +1125,14 @@ def download_photo_page(
             dump_dir=str(media_dir),
             debug=debug,
         )
+        best = res.get("best_jpeg")
+        if best:
+            # Convenience copy with stable name.
+            stable = out_dir / f"media{media_num}.jpg"
+            try:
+                stable.write_bytes(Path(best).read_bytes())
+            except Exception:
+                pass
         results.append(
             {
                 "dirNum": dir_num,
@@ -1014,6 +1141,110 @@ def download_photo_page(
                 "dump_dir": res.get("dump_dir"),
             }
         )
+    return results
+
+
+def download_media_page(
+    client: TrailCamClient,
+    token: int,
+    page_no: int = 0,
+    item_cnt_per_page: int = 45,
+    photo_limit: int = 12,
+    video_limit: int = 0,
+    out_root: str = "out/media",
+    art_typ: int = 7,
+    listen_s: float = 75.0,
+    idle_break_s: float = 2.0,
+    video_fps: int = 30,
+    debug: bool = False,
+) -> List[Dict[str, Any]]:
+    """Download a page worth of media entries (photos and optionally videos)."""
+    entries = fetch_media_list_page(
+        client,
+        token,
+        page_no=page_no,
+        item_cnt_per_page=item_cnt_per_page,
+        debug=debug,
+    )
+    if not entries:
+        print("No media entries found on requested page.")
+        return []
+
+    photos = [e for e in entries if _is_photo_entry(e)][:photo_limit]
+    videos = [e for e in entries if _is_video_entry(e)][:video_limit]
+
+    root = Path(out_root)
+    root.mkdir(parents=True, exist_ok=True)
+
+    results: List[Dict[str, Any]] = []
+    if photos:
+        print(f"Downloading {len(photos)} photo(s) from page {page_no} into {root} ...")
+    for idx, entry in enumerate(photos, start=1):
+        dir_num = int(entry["dirNum"])
+        media_num = int(entry["mediaNum"])
+        out_dir = root / f"dir{dir_num}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        media_dir = out_dir / f"media{media_num}"
+        print(f"[photo {idx}/{len(photos)}] dir={dir_num} media={media_num}")
+        res = send_photo_download_flow(
+            client,
+            token,
+            dir_num=dir_num,
+            media_num=media_num,
+            file_type=0,
+            art_typ=art_typ,
+            listen_s=listen_s,
+            idle_break_s=idle_break_s,
+            dump_dir=str(media_dir),
+            debug=debug,
+        )
+        best = res.get("best_jpeg")
+        if best:
+            stable = out_dir / f"media{media_num}.jpg"
+            try:
+                stable.write_bytes(Path(best).read_bytes())
+            except Exception:
+                pass
+        results.append(
+            {
+                "kind": "photo",
+                "dirNum": dir_num,
+                "mediaNum": media_num,
+                "path": str(out_dir / f"media{media_num}.jpg") if best else None,
+                "dump_dir": res.get("dump_dir"),
+            }
+        )
+
+    if videos:
+        print(f"Downloading {len(videos)} video(s) from page {page_no} into {root} ...")
+    for idx, entry in enumerate(videos, start=1):
+        dir_num = int(entry["dirNum"])
+        media_num = int(entry["mediaNum"])
+        out_dir = root / f"dir{dir_num}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_mp4 = out_dir / f"media{media_num}.mp4"
+        print(f"[video {idx}/{len(videos)}] dir={dir_num} media={media_num}")
+        send_video_download_flow(
+            client,
+            token,
+            dir_num=dir_num,
+            media_num=media_num,
+            file_type=1,
+            fps=video_fps,
+            listen_s=listen_s,
+            idle_break_s=idle_break_s,
+            out_mp4_path=str(out_mp4),
+            debug=debug,
+        )
+        results.append(
+            {
+                "kind": "video",
+                "dirNum": dir_num,
+                "mediaNum": media_num,
+                "path": str(out_mp4),
+            }
+        )
+
     return results
 
 
