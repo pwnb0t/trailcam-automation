@@ -14,6 +14,7 @@ from flows import (
     nmcli_connect,
     nmcli_list_ssids,
     nmcli_rescan,
+    send_video_download_flow,
     send_photo_download_flow,
     send_full_json_flow,
     wifi_has_camera_ip,
@@ -64,6 +65,11 @@ async def main():
         "--download-photo",
         action="store_true",
         help="After login, request a single photo download via cmdId=1285",
+    )
+    parser.add_argument(
+        "--download-video",
+        action="store_true",
+        help="After login, request a single video playback/download via cmdId=769 and save an MP4",
     )
     parser.add_argument(
         "--download-page",
@@ -122,6 +128,17 @@ async def main():
         type=int,
         default=7,
         help="ARTEMIS type to use for cmdId=1285 request (default: %(default)s; app often uses 7)",
+    )
+    parser.add_argument(
+        "--video-fps",
+        type=int,
+        default=30,
+        help="FPS hint for ffmpeg mux when using --download-video (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--video-out",
+        default="",
+        help="Explicit output MP4 path for --download-video (default: out/media/dir<dirNum>/media<mediaNum>.mp4)",
     )
     parser.add_argument(
         "--dump-thumbs",
@@ -248,6 +265,27 @@ async def main():
                     art_typ=args.download_art_typ,
                     listen_s=args.download_listen_s,
                     idle_break_s=args.download_idle_s,
+                    debug=args.debug,
+                )
+            if args.download_video:
+                if args.dir_num is None or args.media_num is None:
+                    raise SystemExit("--download-video requires --dir-num and --media-num")
+                if args.video_out:
+                    out_mp4 = args.video_out
+                else:
+                    out_mp4 = str(
+                        Path(args.media_out_dir) / f"dir{args.dir_num}" / f"media{args.media_num}.mp4"
+                    )
+                send_video_download_flow(
+                    client,
+                    token,
+                    dir_num=args.dir_num,
+                    media_num=args.media_num,
+                    file_type=1,
+                    fps=args.video_fps,
+                    listen_s=args.download_listen_s,
+                    idle_break_s=args.download_idle_s,
+                    out_mp4_path=out_mp4,
                     debug=args.debug,
                 )
             if args.download_page:

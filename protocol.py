@@ -8,6 +8,9 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from constants import AES_CMD_IV, AES_CMD_KEY
 
+V4_PAGE_SIZE = 0x1000
+V4_PAGE_AES_CBC_PREFIX_LEN = 0x60
+
 
 def unpack_f1(pkt: bytes) -> Optional[Tuple[int, bytes, int]]:
     if len(pkt) < 4 or pkt[0] != 0xF1:
@@ -220,3 +223,33 @@ def decrypt_artemis_json(body: bytes) -> List[Dict]:
         if obj:
             out.append(obj)
     return out
+
+
+def decrypt_v4_media_data_pages(data: bytes) -> bytes:
+    """Decrypt ver=4 media record data (video/audio) as seen in video playback/download.
+
+    Empirical: for each 0x1000-byte page of `data`, the first 0x60 bytes are AES-128-CBC
+    encrypted using the same 16-byte key as the command channel and a zero IV. The
+    remainder of each page is plaintext.
+    """
+    if not data:
+        return data
+    if V4_PAGE_AES_CBC_PREFIX_LEN % 16 != 0:
+        raise ValueError("V4 AES prefix length must be multiple of 16")
+
+    out = bytearray(data)
+    for off in range(0, len(out), V4_PAGE_SIZE):
+        ct = bytes(out[off : off + V4_PAGE_AES_CBC_PREFIX_LEN])
+        if not ct:
+            continue
+        if len(ct) < 16:
+            continue
+        if len(ct) % 16 != 0:
+            ct = ct[: (len(ct) // 16) * 16]
+        if not ct:
+            continue
+        cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
+        dec = cipher.decryptor()
+        pt = dec.update(ct) + dec.finalize()
+        out[off : off + len(pt)] = pt
+    return bytes(out)
