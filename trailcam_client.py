@@ -78,7 +78,7 @@ async def main():
     parser.add_argument(
         "--download-page",
         action="store_true",
-        help="After login, fetch one media-list page and download the newest photo entries",
+        help="After login, fetch one media-list page and download all media entries returned in that page",
     )
     parser.add_argument(
         "--list-media-page",
@@ -106,24 +106,12 @@ async def main():
         "--page-item-cnt",
         type=int,
         default=45,
-        help="Items per media-list page request (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--page-download-limit",
-        type=int,
-        default=12,
-        help="Maximum photos to download from fetched page (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--page-video-limit",
-        type=int,
-        default=0,
-        help="Maximum videos to download from fetched page when using --download-page (default: %(default)s)",
+        help="Items per media-list page request (default: %(default)s). This effectively controls how many items --download-page will download.",
     )
     parser.add_argument(
         "--media-out-dir",
         default="out/media",
-        help="Output directory root for --download-page results (default: %(default)s)",
+        help="Output directory root for downloads (default: %(default)s)",
     )
     parser.add_argument(
         "--dir-num",
@@ -320,8 +308,6 @@ async def main():
                     token,
                     page_no=args.page_no,
                     item_cnt_per_page=args.page_item_cnt,
-                    photo_limit=args.page_download_limit,
-                    video_limit=args.page_video_limit,
                     out_root=args.media_out_dir,
                     art_typ=args.download_art_typ,
                     listen_s=args.download_listen_s,

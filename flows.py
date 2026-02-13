@@ -1149,8 +1149,6 @@ def download_media_page(
     token: int,
     page_no: int = 0,
     item_cnt_per_page: int = 45,
-    photo_limit: int = 12,
-    video_limit: int = 0,
     out_root: str = "out/media",
     art_typ: int = 7,
     listen_s: float = 75.0,
@@ -1158,7 +1156,7 @@ def download_media_page(
     video_fps: int = 30,
     debug: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Download a page worth of media entries (photos and optionally videos)."""
+    """Download all media entries returned in a single media-list page."""
     entries = fetch_media_list_page(
         client,
         token,
@@ -1170,8 +1168,8 @@ def download_media_page(
         print("No media entries found on requested page.")
         return []
 
-    photos = [e for e in entries if _is_photo_entry(e)][:photo_limit]
-    videos = [e for e in entries if _is_video_entry(e)][:video_limit]
+    photos = [e for e in entries if _is_photo_entry(e)]
+    videos = [e for e in entries if _is_video_entry(e)]
 
     root = Path(out_root)
     root.mkdir(parents=True, exist_ok=True)
