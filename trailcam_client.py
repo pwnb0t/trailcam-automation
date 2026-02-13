@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import threading
 import time
+from pathlib import Path
 
 from client import TrailCamClient
 from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
