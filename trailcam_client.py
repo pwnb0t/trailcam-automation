@@ -11,6 +11,7 @@ from ble import ble_wake_and_get_creds
 from flows import (
     download_photo_page,
     download_media_page,
+    download_photo_to_out,
     fetch_media_list_all,
     fetch_media_list_page,
     handshake_prelude,
@@ -19,7 +20,6 @@ from flows import (
     nmcli_list_ssids,
     nmcli_rescan,
     send_video_download_flow,
-    send_photo_download_flow,
     wifi_has_camera_ip,
 )
 
@@ -141,7 +141,7 @@ async def main():
     parser.add_argument(
         "--video-out",
         default="",
-        help="Explicit output MP4 path for --download-video (default: out/media/dir<dirNum>/media<mediaNum>.mp4)",
+        help="Explicit output MP4 path for --download-video (default: out/media/<dirNum>/media####.mp4)",
     )
     args = parser.parse_args()
 
@@ -245,16 +245,17 @@ async def main():
         if args.download_photo:
             if args.dir_num is None or args.media_num is None:
                 raise SystemExit("--download-photo requires --dir-num and --media-num")
-            send_photo_download_flow(
+            out_path = download_photo_to_out(
                 client,
                 token,
                 dir_num=args.dir_num,
                 media_num=args.media_num,
-                file_type=0,
+                out_root=args.media_out_dir,
                 listen_s=args.download_listen_s,
                 idle_break_s=args.download_idle_s,
                 debug=args.debug,
             )
+            print(f"Wrote photo: {out_path or 'none'}")
             return
 
         if args.download_video:
@@ -263,7 +264,7 @@ async def main():
             if args.video_out:
                 out_mp4 = args.video_out
             else:
-                out_mp4 = str(Path(args.media_out_dir) / f"dir{args.dir_num}" / f"media{args.media_num}.mp4")
+                out_mp4 = str(Path(args.media_out_dir) / str(args.dir_num) / f"media{int(args.media_num):04d}.mp4")
             send_video_download_flow(
                 client,
                 token,

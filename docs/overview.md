@@ -10,6 +10,11 @@ This folder describes the on-wire protocol we have reverse engineered for the Tr
 - Photo download: request and reconstruct a full-resolution JPEG via `cmdId=1285` and `D0 subtype 0x03` bulk transfer.
 - Video download/playback: request and reconstruct an MP4 via `cmdId=769`/`cmdId=770` and `D0 subtype 0x02` bulk transfer.
 
+## Outputs
+- Photos: `out/media/<dirNum>/media####.jpg` (example: `out/media/102/media0940.jpg`).
+- Videos: `out/media/<dirNum>/media####.mp4`.
+- Temporary artifacts: `out/tmp/` (expected to be auto-cleaned after successful downloads).
+
 ## Document Index
 - `docs/flows.md`
 - `docs/opcodes.md`

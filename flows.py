@@ -24,6 +24,18 @@ from protocol import (
 from seed import get_seed_thumbnail_reqs
 
 
+def _media_dir_path(out_root: str, dir_num: int) -> Path:
+    # Stable NAS-friendly layout: out/media/<dirNum>/...
+    p = Path(out_root) / str(int(dir_num))
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _media_file_path(out_root: str, dir_num: int, media_num: int, file_type: int) -> Path:
+    d = _media_dir_path(out_root, dir_num)
+    ext = ".mp4" if int(file_type) == 1 else ".jpg"
+    return d / f"media{int(media_num):04d}{ext}"
+
 def nmcli_rescan() -> None:
     subprocess.run(["sudo", "nmcli", "dev", "wifi", "rescan"], capture_output=True)
 
@@ -548,6 +560,43 @@ def send_photo_download_flow(
         "dump_dir": str(out_dir),
         "best_jpeg": str(out_dir / "download.jpg") if (out_dir / "download.jpg").exists() else None,
     }
+
+
+def download_photo_to_out(
+    client: TrailCamClient,
+    token: int,
+    dir_num: int,
+    media_num: int,
+    out_root: str = "out/media",
+    listen_s: float = 45.0,
+    idle_break_s: float = 4.0,
+    temp_root: str = "out/tmp",
+    debug: bool = False,
+) -> Optional[Path]:
+    """Download a photo and write it to the stable output layout.
+
+    Uses a temp dump directory under out/tmp and only keeps the final JPEG.
+    """
+    out_path = _media_file_path(out_root, dir_num, media_num, file_type=0)
+    tmp_base = Path(temp_root) / "photo_dumps"
+    tmp_base.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f"photo_{dir_num}_{media_num}_", dir=str(tmp_base)) as td:
+        res = send_photo_download_flow(
+            client,
+            token,
+            dir_num=dir_num,
+            media_num=media_num,
+            file_type=0,
+            listen_s=listen_s,
+            idle_break_s=idle_break_s,
+            dump_dir=td,
+            debug=debug,
+        )
+        best = res.get("best_jpeg")
+        if not best:
+            return None
+        out_path.write_bytes(Path(best).read_bytes())
+        return out_path
 
 
 def _parse_artemis_v4_payload_header(payload: bytes) -> Optional[Dict[str, int]]:
@@ -1090,6 +1139,7 @@ def download_photo_page(
     out_root: str = "out/media",
     listen_s: float = 45.0,
     idle_break_s: float = 4.0,
+    temp_root: str = "out/tmp",
     debug: bool = False,
 ) -> List[Dict[str, Any]]:
     entries = fetch_media_list_page(
@@ -1111,41 +1161,27 @@ def download_photo_page(
         return []
 
     results: List[Dict[str, Any]] = []
-    root = Path(out_root)
-    root.mkdir(parents=True, exist_ok=True)
-    print(f"Downloading {len(photos)} photo(s) from page {page_no} into {root} ...")
+    print(f"Downloading {len(photos)} photo(s) from page {page_no} into {out_root} ...")
     for idx, entry in enumerate(photos, start=1):
         dir_num = int(entry.get("dirNum", entry.get("mediaDirNum")))
         media_num = int(entry.get("mediaNum"))
-        out_dir = root / f"dir{dir_num}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        media_dir = out_dir / f"media{media_num}"
         print(f"[{idx}/{len(photos)}] dir={dir_num} media={media_num}")
-        res = send_photo_download_flow(
+        out_path = download_photo_to_out(
             client,
             token,
             dir_num=dir_num,
             media_num=media_num,
-            file_type=0,
+            out_root=out_root,
             listen_s=listen_s,
             idle_break_s=idle_break_s,
-            dump_dir=str(media_dir),
+            temp_root=temp_root,
             debug=debug,
         )
-        best = res.get("best_jpeg")
-        if best:
-            # Convenience copy with stable name.
-            stable = out_dir / f"media{media_num}.jpg"
-            try:
-                stable.write_bytes(Path(best).read_bytes())
-            except Exception:
-                pass
         results.append(
             {
                 "dirNum": dir_num,
                 "mediaNum": media_num,
-                "best_jpeg": res.get("best_jpeg"),
-                "dump_dir": res.get("dump_dir"),
+                "path": str(out_path) if out_path else None,
             }
         )
     return results
@@ -1160,6 +1196,7 @@ def download_media_page(
     listen_s: float = 75.0,
     idle_break_s: float = 2.0,
     video_fps: int = 30,
+    temp_root: str = "out/tmp",
     debug: bool = False,
 ) -> List[Dict[str, Any]]:
     """Download all media entries returned in a single media-list page."""
@@ -1177,55 +1214,39 @@ def download_media_page(
     photos = [e for e in entries if _is_photo_entry(e)]
     videos = [e for e in entries if _is_video_entry(e)]
 
-    root = Path(out_root)
-    root.mkdir(parents=True, exist_ok=True)
-
     results: List[Dict[str, Any]] = []
     if photos:
-        print(f"Downloading {len(photos)} photo(s) from page {page_no} into {root} ...")
+        print(f"Downloading {len(photos)} photo(s) from page {page_no} into {out_root} ...")
     for idx, entry in enumerate(photos, start=1):
         dir_num = int(entry["dirNum"])
         media_num = int(entry["mediaNum"])
-        out_dir = root / f"dir{dir_num}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        media_dir = out_dir / f"media{media_num}"
         print(f"[photo {idx}/{len(photos)}] dir={dir_num} media={media_num}")
-        res = send_photo_download_flow(
+        out_path = download_photo_to_out(
             client,
             token,
             dir_num=dir_num,
             media_num=media_num,
-            file_type=0,
+            out_root=out_root,
             listen_s=listen_s,
             idle_break_s=idle_break_s,
-            dump_dir=str(media_dir),
+            temp_root=temp_root,
             debug=debug,
         )
-        best = res.get("best_jpeg")
-        if best:
-            stable = out_dir / f"media{media_num}.jpg"
-            try:
-                stable.write_bytes(Path(best).read_bytes())
-            except Exception:
-                pass
         results.append(
             {
                 "kind": "photo",
                 "dirNum": dir_num,
                 "mediaNum": media_num,
-                "path": str(out_dir / f"media{media_num}.jpg") if best else None,
-                "dump_dir": res.get("dump_dir"),
+                "path": str(out_path) if out_path else None,
             }
         )
 
     if videos:
-        print(f"Downloading {len(videos)} video(s) from page {page_no} into {root} ...")
+        print(f"Downloading {len(videos)} video(s) from page {page_no} into {out_root} ...")
     for idx, entry in enumerate(videos, start=1):
         dir_num = int(entry["dirNum"])
         media_num = int(entry["mediaNum"])
-        out_dir = root / f"dir{dir_num}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_mp4 = out_dir / f"media{media_num}.mp4"
+        out_mp4 = _media_file_path(out_root, dir_num, media_num, file_type=1)
         print(f"[video {idx}/{len(videos)}] dir={dir_num} media={media_num}")
         send_video_download_flow(
             client,
@@ -1237,6 +1258,7 @@ def download_media_page(
             listen_s=listen_s,
             idle_break_s=idle_break_s,
             out_mp4_path=str(out_mp4),
+            temp_root=temp_root,
             debug=debug,
         )
         results.append(
