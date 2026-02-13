@@ -24,6 +24,20 @@ def _must_float(v: Any, field: str) -> float:
 
 
 @dataclass(frozen=True)
+class AppConfig:
+    version: int
+    cameras: Dict[str, CameraConfig]
+    defaults: DefaultsConfig
+    paths: PathsConfig
+
+    def get_camera(self, alias: str) -> CameraConfig:
+        try:
+            return self.cameras[alias]
+        except KeyError as e:
+            raise KeyError(f"Unknown camera alias {alias!r}. Known: {sorted(self.cameras)}") from e
+
+
+@dataclass(frozen=True)
 class CameraConfig:
     alias: str
     ble_address: str
@@ -51,20 +65,6 @@ class PathsConfig:
 
     staging_dir: Optional[str] = None
     final_media_dir: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class AppConfig:
-    version: int
-    cameras: Dict[str, CameraConfig]
-    defaults: DefaultsConfig
-    paths: PathsConfig
-
-    def get_camera(self, alias: str) -> CameraConfig:
-        try:
-            return self.cameras[alias]
-        except KeyError as e:
-            raise KeyError(f"Unknown camera alias {alias!r}. Known: {sorted(self.cameras)}") from e
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -131,4 +131,3 @@ def load_config(path: str | Path) -> AppConfig:
     )
 
     return AppConfig(version=ver, cameras=cams, defaults=d, paths=paths)
-

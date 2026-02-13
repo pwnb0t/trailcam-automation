@@ -9,7 +9,14 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. todo
+1. Use the new AppConfig (config.py) class throughout the app.
+ 
+2. Connection logic (partly done I think in connection.py, but I'm not sure I see it being used)
+  * Currently does BLE wake -> AP join -> UDP handshake -> login.
+  * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
+  * In this case, it should instead go back to BLE wake.
+  * I would like it if all of this was contained in its own class/step before moving forward.
+
 
 
 ## Potential Steps
@@ -28,12 +35,6 @@
     * front_YYYYMMDD_HHMMSS.jpg, back_20260213_132127.mp4, ...
     * Split by week: /mnt/trailcam/media/YYYY-WW/front_YYYYMMDD_HHMMSS.jpg
     * Week cutoff should be Sundays at 8am. (I'll be running the script daily at 10am)
-
-* Connection logic
-    * Currently does BLE wake -> AP join -> UDP handshake -> login.
-    * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
-    * In this case, it should instead go back to BLE wake.
-    * I would like it if all of this was contained in its own class/step before moving forward.
 
 * Code reorg
     * Rename trailcam_client.py to trailcam_client_runner.py
