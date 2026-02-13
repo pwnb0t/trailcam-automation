@@ -6,14 +6,12 @@
 - UDP handshake + login to obtain `login_token_u32`.
 - Media list (`cmdId=768`) and thumbnails (`cmdId=772`).
 - Photo download (`cmdId=1285`) and reconstruction of full-resolution JPEG (saved as `download.jpg`).
-
-## Main Gap
-- Video download parity is not implemented yet.
+- Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. Implement video playback/download (`cmdId=769` start play, data-plane decode/decrypt, `cmdId=770` stop) and reconstruct a valid MP4.
-2. Make paging deterministic for media list (`pageNo=0..N`) with a clean stop condition.
-3. Add offline “replay from pcap” tests for parsers and reassembly to prevent regressions.
+1. Make paging deterministic for media list (`pageNo=0..N`) with a clean stop condition.
+2. Add offline “replay from pcap” tests for parsers and reassembly to prevent regressions.
+3. Turn the current CLI flows into a stable library API for automation (cron, downloads, sync to NAS, etc.).
 
 ## Docs
 - `docs/overview.md`

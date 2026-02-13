@@ -97,7 +97,7 @@ Using `tools/compare_video_pcap_to_sd_mp4.py` to compare the PCAP record bytes t
 - Audio: all 157 records satisfy `len(pcap_data[7:]) == len(mp4_sample)`, but `pcap_data[7:] != mp4_sample` for all frames.
 - Video: 298/304 frames match by size, but `pcap_data != mp4_sample` for all frames.
 
-Conclusion: the ver=4 `data` region is not a direct copy of MP4 sample bytes. There is an additional transform (most likely encryption) that we still need to reverse for live video download.
+Conclusion: the ver=4 `data` region is not a direct copy of MP4 sample bytes. The payload requires a partial AES-CBC decrypt step before it becomes standard H.264/AAC.
 
 ## Decryption: What Makes PCAP Bytes Turn Into H.264/AAC
 
@@ -168,15 +168,15 @@ Comparison CSV (example):
 
 ```bash
 python3 tools/compare_video_pcap_to_sd_mp4.py \
-  --records-csv out/video_extract6/trailcam_8-3-view-and-download-video/subtype_02_v4_records.csv \
-  --records-dir out/video_extract6/trailcam_8-3-view-and-download-video/subtype_02_records \
+  --records-csv out/video_extract8/trailcam_8-3-view-and-download-video/subtype_02_v4_records.csv \
+  --records-dir out/video_extract8/trailcam_8-3-view-and-download-video/subtype_02_records \
   --mp4 pcap/DSCF0935.MP4 \
   --out-csv out/video_compare/dscf0935_sub02_compare.csv
 ```
 
 ## Next Steps For Video (Likely Required)
 
-If we want video parity without relying on the phone app, we likely need one of:
+If we want full parity with the SD-card MP4, we likely need:
 
 1. Extract and decrypt the low-res 320x176 H.264 track (track 1 in `pcap/DSCF0935.MP4`) from the capture, likely from `D0 subtype=0x03`.
-2. Move this decryption logic into the live client flow so the Python client can save `*.mp4` videos directly (not only offline PCAP tooling).
+2. Expand live tooling to handle more subtypes/captures robustly (timeouts, retransmits, and clean stop conditions).

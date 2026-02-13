@@ -8,6 +8,7 @@ This folder describes the on-wire protocol we have reverse engineered for the Tr
 - UDP handshake + login: establish the UDP session and obtain `login_token_u32` (from `cmdId=0` response).
 - Gallery: fetch media list (`cmdId=768`) and thumbnails (`cmdId=772`).
 - Photo download: request and reconstruct a full-resolution JPEG via `cmdId=1285` and `D0 subtype 0x03` bulk transfer.
+- Video download/playback: request and reconstruct an MP4 via `cmdId=769`/`cmdId=770` and `D0 subtype 0x02` bulk transfer.
 
 ## Document Index
 - `docs/flows.md`
@@ -15,7 +16,7 @@ This folder describes the on-wire protocol we have reverse engineered for the Tr
 - `docs/packet-format.md`
 - `docs/json-commands.md`
 - `docs/download-photo.md`
+- `docs/download-video.md`
 
 ## Historical Notes
 Older notes and intermediate findings were moved to `docs/historical/`.
-

@@ -54,3 +54,17 @@ Camera ACK (JSON) looks like:
 
 The actual media payload is then delivered via bulk streams (not inside that JSON).
 
+## Start Play Record (`cmdId=769`)
+
+Client sends:
+- `{"cmdId":769,"fileType":1,"dirNum":...,"mediaNum":...,"sessionNo":...,"token":<login_token_u32>}`
+
+Camera replies with:
+- `{"cmdId":769,"startPbRet":0,"videoWidth":1920,"videoHeight":1080,"totalFrame":304,"totalTime":10333,"result":0}`
+
+The actual media payload is then delivered via bulk streams (commonly `D0 subtype=0x02`).
+
+## Stop Play Record (`cmdId=770`)
+
+Client sends:
+- `{"cmdId":770,"token":<login_token_u32>}`
