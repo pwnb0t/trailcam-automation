@@ -42,6 +42,7 @@
   * Download files to staging. Move files from staging to media and rename
   * front_YYYYMMDD_HHMMSS.jpg, back_20260213_132127.mp4, ...
   * Split by week: /mnt/trailcam/media/YYYY-WW/front_YYYYMMDD_HHMMSS.jpg
+  * Week cutoff should be Sundays at 8am. (I'll be running the script daily at 10am)
 
 * Connection logic
   * Currently does BLE wake -> AP join -> UDP handshake -> login.
