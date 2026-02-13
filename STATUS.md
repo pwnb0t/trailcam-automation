@@ -11,7 +11,7 @@
 - Video download parity is not implemented yet.
 
 ## Next Steps
-1. Implement video download reconstruction (likely shares `cmdId=1285` control plane but differs in payload framing).
+1. Implement video playback/download (`cmdId=769` start play, stream decode, `cmdId=770` stop) and reconstruct an MP4 offline.
 2. Make paging deterministic for media list (`pageNo=0..N`) with a clean stop condition.
 3. Add offline “replay from pcap” tests for parsers and reassembly to prevent regressions.
 
@@ -22,4 +22,5 @@
 - `docs/packet-format.md`
 - `docs/json-commands.md`
 - `docs/download-photo.md`
+- `docs/download-video.md`
 - `pcap/details.md`
