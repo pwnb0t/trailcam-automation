@@ -9,7 +9,7 @@ from flows import (
     fetch_media_list_page,
     send_video_download_flow,
 )
-from commands import DownloadMediaPageCommand
+from src.command.download_media_page_command import DownloadMediaPageCommand
 from runner_inputs import parse_env_and_args_to_config
 
 

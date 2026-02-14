@@ -10,10 +10,7 @@ from flows import (
     send_video_download_flow,
 )
 from session import TrailCamSession
-
-
-class CommandError(RuntimeError):
-    pass
+from src.command.command import Command, CommandError
 
 
 def _media_file_path(out_root: str, dir_num: int, media_num: int, file_type: int) -> str:
@@ -25,7 +22,7 @@ def _media_file_path(out_root: str, dir_num: int, media_num: int, file_type: int
 
 
 @dataclass
-class DownloadMediaPageCommand:
+class DownloadMediaPageCommand(Command):
     session: TrailCamSession
 
     def validate(self) -> None:
