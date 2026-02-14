@@ -932,14 +932,21 @@ def _is_photo_entry(entry: Dict[str, Any]) -> bool:
 
 
 def _fetch_media_list_page_client(
-    client: TrailCamClient,
-    token: int,
-    page_no: int = 0,
-    item_cnt_per_page: int = 45,
+    session: TrailCamSession,
+    *,
+    page_no: Optional[int] = None,
+    item_cnt_per_page: Optional[int] = None,
     retries: int = 3,
     timeout_s: float = 8.0,
-    debug: bool = False,
 ) -> List[Dict[str, Any]]:
+    client = session.client
+    token = int(session.login_token_u32)
+    debug = bool(session.debug)
+    if page_no is None:
+        page_no = int(session.defaults.page_no)
+    if item_cnt_per_page is None:
+        item_cnt_per_page = int(session.defaults.page_item_cnt)
+
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": item_cnt_per_page, "pageNo": page_no, "token": token}
     thumb_reqs = get_seed_thumbnail_reqs()
@@ -1069,13 +1076,7 @@ def _fetch_media_list_page_client(
 
 def fetch_media_list_page(session: TrailCamSession) -> List[Dict[str, Any]]:
     """Fetch a single media-list page using session defaults."""
-    return _fetch_media_list_page_client(
-        session.client,
-        int(session.login_token_u32),
-        page_no=int(session.defaults.page_no),
-        item_cnt_per_page=int(session.defaults.page_item_cnt),
-        debug=bool(session.debug),
-    )
+    return _fetch_media_list_page_client(session)
 
 
 def _fetch_media_list_all_client(
@@ -1104,13 +1105,7 @@ def _fetch_media_list_all_client(
     no_new_pages = 0
 
     for page_no in range(0, max_pages):
-        page = _fetch_media_list_page_client(
-            client,
-            token,
-            page_no=page_no,
-            item_cnt_per_page=item_cnt_per_page,
-            debug=debug,
-        )
+        page = _fetch_media_list_page_client(session, page_no=page_no, item_cnt_per_page=item_cnt_per_page)
         if not page:
             break
 
