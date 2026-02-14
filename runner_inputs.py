@@ -1,0 +1,184 @@
+from __future__ import annotations
+
+import argparse
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
+
+
+def _default_media_out_dir() -> str:
+    p = Path("/mnt/trailcam/staging")
+    try:
+        if p.exists() and p.is_dir():
+            return str(p)
+    except Exception:
+        pass
+    return "out/media"
+
+
+def _env(name: str) -> Optional[str]:
+    v = os.environ.get(name)
+    if v is None:
+        return None
+    v = v.strip()
+    return v if v else None
+
+
+def _env_int(name: str) -> Optional[int]:
+    v = _env(name)
+    if v is None:
+        return None
+    return int(v)
+
+
+def _env_float(name: str) -> Optional[float]:
+    v = _env(name)
+    if v is None:
+        return None
+    return float(v)
+
+
+@dataclass(frozen=True)
+class EnvDefaults:
+    """Environment-provided defaults for the runner.
+
+    These are optional. CLI flags still take precedence.
+    """
+
+    ssid: Optional[str] = None
+    ble_address: str = DEFAULT_BLE_ADDRESS
+    ifname: str = WIFI_IFNAME
+    port: int = 16734
+
+    media_out_dir: str = "out/media"
+    tmp_dir: str = "out/tmp"
+
+    page_no: int = 0
+    page_item_cnt: int = 45
+    list_max_pages: int = 200
+
+    download_listen_s: float = 45.0
+    download_idle_s: float = 4.0
+
+    video_fps: int = 30
+    video_out: str = ""
+
+    @staticmethod
+    def from_env() -> "EnvDefaults":
+        # Conservative: only a small set of env vars, all optional.
+        return EnvDefaults(
+            ssid=_env("TRAILCAM_SSID"),
+            ble_address=_env("TRAILCAM_BLE_ADDRESS") or DEFAULT_BLE_ADDRESS,
+            ifname=_env("TRAILCAM_IFNAME") or WIFI_IFNAME,
+            port=_env_int("TRAILCAM_PORT") or 16734,
+            media_out_dir=_env("TRAILCAM_MEDIA_OUT_DIR") or _default_media_out_dir(),
+            tmp_dir=_env("TRAILCAM_TMP_DIR") or "out/tmp",
+            page_no=_env_int("TRAILCAM_PAGE_NO") or 0,
+            page_item_cnt=_env_int("TRAILCAM_PAGE_ITEM_CNT") or 45,
+            list_max_pages=_env_int("TRAILCAM_LIST_MAX_PAGES") or 200,
+            download_listen_s=_env_float("TRAILCAM_DOWNLOAD_LISTEN_S") or 45.0,
+            download_idle_s=_env_float("TRAILCAM_DOWNLOAD_IDLE_S") or 4.0,
+            video_fps=_env_int("TRAILCAM_VIDEO_FPS") or 30,
+            video_out=_env("TRAILCAM_VIDEO_OUT") or "",
+        )
+
+
+def build_parser(env: EnvDefaults) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="TrailCam client runner.")
+    parser.add_argument(
+        "--ble-address",
+        default=env.ble_address,
+        help="BLE MAC address of the camera (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--ssid",
+        default=env.ssid,
+        required=(env.ssid is None),
+        help="Camera AP SSID to connect to (required unless TRAILCAM_SSID is set)",
+    )
+    parser.add_argument(
+        "--ifname",
+        default=env.ifname,
+        help="Wi-Fi interface to use (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=env.port,
+        help="Local UDP port to bind (default: %(default)s)",
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable verbose logging of incoming packets")
+
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--login-only", action="store_true", help="Perform JSON login only and exit")
+    action.add_argument("--download-photo", action="store_true", help="Download one photo (requires --dir-num/--media-num)")
+    action.add_argument("--download-video", action="store_true", help="Download one video (requires --dir-num/--media-num)")
+    action.add_argument("--download-page", action="store_true", help="Download all media items in one media-list page")
+    action.add_argument("--list-media-page", action="store_true", help="List one media-list page")
+    action.add_argument("--list-media-all", action="store_true", help="List all pages until stop condition")
+
+    parser.add_argument(
+        "--list-max-pages",
+        type=int,
+        default=env.list_max_pages,
+        help="Maximum pages to request when using --list-media-all (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--page-no",
+        type=int,
+        default=env.page_no,
+        help="Media list page number for --download-page/--list-media-page (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--page-item-cnt",
+        type=int,
+        default=env.page_item_cnt,
+        help="Items per media-list page request (default: %(default)s)",
+    )
+
+    parser.add_argument(
+        "--media-out-dir",
+        default=env.media_out_dir,
+        help="Output directory root for downloads (default: %(default)s)",
+    )
+    parser.add_argument("--tmp-dir", default=env.tmp_dir, help="Temp directory root (default: %(default)s)")
+
+    parser.add_argument("--dir-num", type=int, default=None, help="Media directory number (e.g. 102)")
+    parser.add_argument("--media-num", type=int, default=None, help="Media number (e.g. 940)")
+
+    parser.add_argument(
+        "--download-listen-s",
+        type=float,
+        default=env.download_listen_s,
+        help="Seconds to listen for bulk download/playback data (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--download-idle-s",
+        type=float,
+        default=env.download_idle_s,
+        help="Stop capture after this many seconds of idle (default: %(default)s)",
+    )
+
+    parser.add_argument("--video-fps", type=int, default=env.video_fps, help="FPS hint for ffmpeg mux (default: %(default)s)")
+    parser.add_argument("--video-out", default=env.video_out, help="Explicit output MP4 path for --download-video")
+
+    return parser
+
+
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    env = EnvDefaults.from_env()
+    parser = build_parser(env)
+    args = parser.parse_args(argv)
+
+    # Normalize: allow "config.yml" naming for humans without changing code.
+    if args.ssid:
+        args.ssid = str(args.ssid).strip()
+
+    # Ensure output dirs exist for local runs.
+    Path(args.media_out_dir).mkdir(parents=True, exist_ok=True)
+    Path(args.tmp_dir).mkdir(parents=True, exist_ok=True)
+
+    return args

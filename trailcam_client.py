@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-import argparse
 import asyncio
 import threading
 import time
 from pathlib import Path
 
 from client import TrailCamClient
-from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
 from ble import ble_wake_and_get_creds
 from flows import (
-    download_photo_page,
-    download_media_page,
     download_photo_to_out,
     fetch_media_list_all,
     fetch_media_list_page,
@@ -25,139 +21,11 @@ from flows import (
 from config import CameraConfig, DefaultsConfig, PathsConfig
 from session import TrailCamSession
 from commands import DownloadMediaPageCommand
-
-
-def _default_media_out_dir() -> str:
-    # Prefer NAS staging when present (piiter); otherwise fall back to local.
-    p = Path("/mnt/trailcam/staging")
-    try:
-        if p.exists() and p.is_dir():
-            return str(p)
-    except Exception:
-        pass
-    return "out/media"
+from runner_inputs import parse_args
 
 
 async def main():
-    parser = argparse.ArgumentParser(
-        description="TrailCam client: BLE wake, connect, JSON login, and media list."
-    )
-    parser.add_argument(
-        "--ble-address",
-        default=DEFAULT_BLE_ADDRESS,
-        help="BLE MAC address of the camera (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--ssid",
-        required=True,
-        help="Camera AP SSID to connect to (required; e.g. TrailCam_5DBD)",
-    )
-    parser.add_argument(
-        "--ifname",
-        default=WIFI_IFNAME,
-        help="Wi-Fi interface to use (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=16734,
-        help="Local UDP port to bind (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable verbose logging of incoming packets",
-    )
-    action = parser.add_mutually_exclusive_group()
-    action.add_argument(
-        "--login-only",
-        action="store_true",
-        help="Perform JSON login only and exit",
-    )
-    action.add_argument(
-        "--download-photo",
-        action="store_true",
-        help="After login, request a single photo download via cmdId=1285",
-    )
-    action.add_argument(
-        "--download-video",
-        action="store_true",
-        help="After login, request a single video playback/download via cmdId=769 and save an MP4",
-    )
-    action.add_argument(
-        "--download-page",
-        action="store_true",
-        help="After login, fetch one media-list page and download all media entries returned in that page",
-    )
-    action.add_argument(
-        "--list-media-page",
-        action="store_true",
-        help="After login, fetch one media-list page and print entries",
-    )
-    action.add_argument(
-        "--list-media-all",
-        action="store_true",
-        help="After login, page through media list and print entries until stop condition",
-    )
-    parser.add_argument(
-        "--list-max-pages",
-        type=int,
-        default=200,
-        help="Maximum pages to request when using --list-media-all (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--page-no",
-        type=int,
-        default=0,
-        help="Media list page number for --download-page (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--page-item-cnt",
-        type=int,
-        default=45,
-        help="Items per media-list page request (default: %(default)s). This effectively controls how many items --download-page will download.",
-    )
-    parser.add_argument(
-        "--media-out-dir",
-        default=_default_media_out_dir(),
-        help="Output directory root for downloads (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--dir-num",
-        type=int,
-        default=None,
-        help="Media directory number for --download-photo (e.g. 102)",
-    )
-    parser.add_argument(
-        "--media-num",
-        type=int,
-        default=None,
-        help="Media number for --download-photo (e.g. 940)",
-    )
-    parser.add_argument(
-        "--download-listen-s",
-        type=float,
-        default=45.0,
-        help="Seconds to listen for bulk download/playback data after sending a download/start-play request (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--download-idle-s",
-        type=float,
-        default=4.0,
-        help="Stop download/playback capture after this many seconds of data-channel idle time (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--video-fps",
-        type=int,
-        default=30,
-        help="FPS hint for ffmpeg mux when using --download-video (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--video-out",
-        default="",
-        help="Explicit output MP4 path for --download-video (default: out/media/<dirNum>/media####.mp4)",
-    )
-    args = parser.parse_args()
+    args = parse_args()
 
     if (args.dir_num is not None or args.media_num is not None) and not (
         args.download_photo or args.download_video
