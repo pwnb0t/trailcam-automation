@@ -3,14 +3,14 @@ import asyncio
 from pathlib import Path
 
 from src.connection.connection import connect_and_login
-from flows import (
+from src.flows import (
     download_photo_to_out,
     fetch_media_list_all,
     fetch_media_list_page,
     send_video_download_flow,
 )
 from src.command.download_media_page_command import DownloadMediaPageCommand
-from runner_inputs import parse_env_and_args_to_config
+from src.runner_inputs import parse_env_and_args_to_config
 
 
 async def main():

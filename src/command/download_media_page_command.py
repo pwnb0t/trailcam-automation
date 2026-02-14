@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from flows import (
+from src.flows import (
     download_photo_to_out,
     fetch_media_list_page,
     send_video_download_flow,
 )
-from session import TrailCamSession
+from src.session import TrailCamSession
 from src.command.command import Command, CommandError
 
 

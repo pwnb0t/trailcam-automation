@@ -4,7 +4,7 @@ from typing import Dict
 
 from bleak import BleakClient
 
-from constants import CHAR_NOTIFY, CHAR_WRITE, WAKE_PAYLOAD
+from src.constants import CHAR_NOTIFY, CHAR_WRITE, WAKE_PAYLOAD
 
 
 async def ble_wake_and_get_creds(address: str) -> Dict[str, str]:

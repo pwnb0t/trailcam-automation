@@ -1,4 +1,4 @@
-from session import TrailCamSession
+from src.session import TrailCamSession
 
 class CommandError(RuntimeError):
     pass

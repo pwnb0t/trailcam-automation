@@ -194,7 +194,7 @@ def _summarize(op: int, subtype: Optional[int], payload: bytes) -> str:
             if art is not None:
                 try:
                     # Import lazily so this tool can still run in minimal envs.
-                    import protocol
+                    from src import protocol
 
                     objs = protocol.decrypt_artemis_json(payload)
                     if objs:

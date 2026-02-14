@@ -4,8 +4,8 @@ import asyncio
 from typing import Optional
 
 from ble import ble_wake_and_get_creds
-from client import TrailCamClient
-from flows import (
+from src.client import TrailCamClient
+from src.flows import (
     handshake_prelude,
     login_and_get_token,
     nmcli_connect,
@@ -13,8 +13,8 @@ from flows import (
     nmcli_rescan,
     wifi_has_camera_ip,
 )
-from runner_inputs import RunnerConfig
-from session import TrailCamSession
+from src.runner_inputs import RunnerConfig
+from src.session import TrailCamSession
 
 
 async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:

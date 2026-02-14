@@ -7,14 +7,11 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from client import TrailCamClient
+from src.client import TrailCamClient
 from constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
 from protocol import (
-    decrypt_artemis_json,
-    decrypt_cmd_b64,
     decrypt_payload_b64_bytes,
     decrypt_v4_media_data_pages,
-    make_ack_body_seq16,
     make_ack_body_seq_list16,
     make_ack_body_seq_window16,
     parse_artemis_records,
@@ -223,7 +220,7 @@ def send_full_json_flow(
                 for ver, typ, payload in parse_artemis_records(body[4:]):
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
                     if dump_artemis and typ in (4, 36):
-                        out_dir = Path("out") / "artemis"
+                        out_dir = Path("../out") / "artemis"
                         out_dir.mkdir(parents=True, exist_ok=True)
                         fname = out_dir / f"rx_ver{ver}_typ{typ}_seq{seq0}.bin"
                         fname.write_bytes(payload)
@@ -272,7 +269,7 @@ def send_full_json_flow(
         return
 
     print(f"Gallery records: {len(records)}")
-    out_dir = Path("out")
+    out_dir = Path("../out")
     if dump_thumbs:
         out_dir.mkdir(parents=True, exist_ok=True)
 

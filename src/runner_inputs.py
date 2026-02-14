@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
-from config import CameraConfig, DefaultsConfig, PathsConfig
+from src.constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
+from src.config import CameraConfig, DefaultsConfig, PathsConfig
 
 
 def _default_media_out_dir() -> str:

@@ -4,8 +4,8 @@ from typing import Dict, List, Optional
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from constants import AES_CMD_IV, AES_CMD_KEY, CONNECT_D0_PACKETS
-from protocol import decrypt_cmd_b64, parse_artemis_records
+from src.constants import AES_CMD_IV, AES_CMD_KEY, CONNECT_D0_PACKETS
+from src.protocol import decrypt_cmd_b64, parse_artemis_records
 
 
 def get_seed_thumbnail_reqs() -> Optional[List[Dict]]:
