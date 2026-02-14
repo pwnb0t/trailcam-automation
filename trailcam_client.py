@@ -311,8 +311,9 @@ async def main():
                 login_token_u32=token,
                 wifi_ssid=args.ssid,
                 wifi_pwd=None,
+                debug=args.debug,
             )
-            cmd = DownloadMediaPageCommand(session, debug=args.debug)
+            cmd = DownloadMediaPageCommand(session)
             results = cmd.run()
             print(f"Downloaded page results: {len(results)} item(s)")
             for r in results:

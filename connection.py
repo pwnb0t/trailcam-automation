@@ -88,8 +88,8 @@ async def connect_and_login(
             login_token_u32=token,
             wifi_ssid=ssid_expected,
             wifi_pwd=wifi_pwd,
+            debug=debug,
         )
     except Exception:
         client.close()
         raise
-

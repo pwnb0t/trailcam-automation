@@ -22,4 +22,4 @@ class TrailCamSession:
     login_token_u32: int
     wifi_ssid: str
     wifi_pwd: Optional[str] = None
-
+    debug: bool = False

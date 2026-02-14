@@ -14,7 +14,6 @@ class CommandError(RuntimeError):
 @dataclass
 class DownloadMediaPageCommand:
     session: TrailCamSession
-    debug: bool = False
 
     def validate(self) -> None:
         s = self.session
@@ -31,5 +30,4 @@ class DownloadMediaPageCommand:
 
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
-        return download_media_page(self.session, debug=self.debug)
-
+        return download_media_page(self.session)

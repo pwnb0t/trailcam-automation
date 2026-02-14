@@ -1190,7 +1190,6 @@ def download_photo_page(
 
 def download_media_page(
     session: TrailCamSession,
-    debug: bool = False,
 ) -> List[Dict[str, Any]]:
     """Download all media entries returned in a single media-list page.
 
@@ -1209,6 +1208,8 @@ def download_media_page(
     # Camera returns an error if itemCntPerPage >= 50 ("need less than 50").
     if item_cnt_per_page >= 50:
         item_cnt_per_page = 45
+
+    debug = bool(getattr(session, "debug", False))
 
     entries = fetch_media_list_page(
         client,
