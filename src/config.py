@@ -256,7 +256,7 @@ def _build_parser(
     return parser
 
 
-def parse_env_and_args_to_config(argv: Optional[list[str]] = None) -> RunnerConfig:
+def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
     """Parse config.yaml + CLI args and return a resolved runner config object.
 
     Precedence:
