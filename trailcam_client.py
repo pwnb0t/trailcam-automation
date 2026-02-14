@@ -2,7 +2,7 @@
 import asyncio
 from pathlib import Path
 
-from connection import connect_and_login
+from src.connection.connection import connect_and_login
 from flows import (
     download_photo_to_out,
     fetch_media_list_all,
