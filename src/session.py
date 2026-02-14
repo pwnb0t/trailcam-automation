@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from src.client import TrailCamClient
-from config import CameraConfig, DefaultsConfig, PathsConfig
+from src.config import CameraConfig, DefaultsConfig, PathsConfig
 
 
 @dataclass

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from constants import AES_CMD_IV, AES_CMD_KEY
+from src.constants import AES_CMD_IV, AES_CMD_KEY
 
 V4_PAGE_SIZE = 0x1000
 V4_PAGE_AES_CBC_PREFIX_LEN = 0x60

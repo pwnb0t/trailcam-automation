@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME, LOCAL_PORT
+from src.constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME, LOCAL_PORT
 
 
 def _must_int(v: Any, field: str) -> int:

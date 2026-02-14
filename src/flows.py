@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.client import TrailCamClient
-from constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
-from protocol import (
+from src.constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
+from src.protocol import (
     decrypt_payload_b64_bytes,
     decrypt_v4_media_data_pages,
     make_ack_body_seq_list16,
@@ -18,7 +18,7 @@ from protocol import (
     parse_artemis_records_strict,
     unpack_f1,
 )
-from seed import get_seed_thumbnail_reqs
+from src.seed import get_seed_thumbnail_reqs
 
 
 def _media_dir_path(out_root: str, dir_num: int) -> Path:

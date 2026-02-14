@@ -4,8 +4,8 @@ import threading
 import time
 from typing import Dict, List, Optional, Tuple
 
-from constants import CAMERA_IP, DISCOVERY_PORT, LOCAL_PORT
-from protocol import build_artemis_record, decrypt_artemis_json, encrypt_cmd_json, unpack_f1
+from src.constants import CAMERA_IP, DISCOVERY_PORT, LOCAL_PORT
+from src.protocol import build_artemis_record, decrypt_artemis_json, encrypt_cmd_json, unpack_f1
 
 
 class TrailCamClient:
