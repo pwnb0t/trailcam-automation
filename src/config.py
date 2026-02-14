@@ -7,7 +7,18 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from src.constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME, LOCAL_PORT
+from src.constants import (
+    DEFAULT_BLE_ADDRESS,
+    WIFI_IFNAME,
+    LOCAL_PORT,
+    DEFAULT_PAGE_NO,
+    DEFAULT_PAGE_ITEM_CNT,
+    DEFAULT_LIST_MAX_PAGES,
+    DEFAULT_DOWNLOAD_LISTEN_S,
+    DEFAULT_DOWNLOAD_IDLE_S,
+    DEFAULT_VIDEO_FPS,
+    MAX_PAGE_ITEM_CNT_EXCLUSIVE,
+)
 
 
 def _must_int(v: Any, field: str) -> int:
@@ -50,14 +61,14 @@ class DefaultsConfig:
     wifi_ifname: str = WIFI_IFNAME
     udp_local_port: int = LOCAL_PORT
 
-    page_no: int = 0
-    page_item_cnt: int = 45
-    list_max_pages: int = 200
+    page_no: int = DEFAULT_PAGE_NO
+    page_item_cnt: int = DEFAULT_PAGE_ITEM_CNT
+    list_max_pages: int = DEFAULT_LIST_MAX_PAGES
 
-    download_listen_s: float = 45.0
-    download_idle_s: float = 4.0
+    download_listen_s: float = DEFAULT_DOWNLOAD_LISTEN_S
+    download_idle_s: float = DEFAULT_DOWNLOAD_IDLE_S
 
-    video_fps: int = 30
+    video_fps: int = DEFAULT_VIDEO_FPS
 
 
 @dataclass(frozen=True)
@@ -136,12 +147,14 @@ def load_config(path: str | Path) -> AppConfig:
     d = DefaultsConfig(
         wifi_ifname=str(defaults_raw.get("wifi_ifname", WIFI_IFNAME)),
         udp_local_port=_must_int(defaults_raw.get("udp_local_port", LOCAL_PORT), "defaults.udp_local_port"),
-        page_no=_must_int(defaults_raw.get("page_no", 0), "defaults.page_no"),
-        page_item_cnt=_must_int(defaults_raw.get("page_item_cnt", 45), "defaults.page_item_cnt"),
-        list_max_pages=_must_int(defaults_raw.get("list_max_pages", 200), "defaults.list_max_pages"),
-        download_listen_s=_must_float(defaults_raw.get("download_listen_s", 45.0), "defaults.download_listen_s"),
-        download_idle_s=_must_float(defaults_raw.get("download_idle_s", 4.0), "defaults.download_idle_s"),
-        video_fps=_must_int(defaults_raw.get("video_fps", 30), "defaults.video_fps"),
+        page_no=_must_int(defaults_raw.get("page_no", DEFAULT_PAGE_NO), "defaults.page_no"),
+        page_item_cnt=_must_int(defaults_raw.get("page_item_cnt", DEFAULT_PAGE_ITEM_CNT), "defaults.page_item_cnt"),
+        list_max_pages=_must_int(defaults_raw.get("list_max_pages", DEFAULT_LIST_MAX_PAGES), "defaults.list_max_pages"),
+        download_listen_s=_must_float(
+            defaults_raw.get("download_listen_s", DEFAULT_DOWNLOAD_LISTEN_S), "defaults.download_listen_s"
+        ),
+        download_idle_s=_must_float(defaults_raw.get("download_idle_s", DEFAULT_DOWNLOAD_IDLE_S), "defaults.download_idle_s"),
+        video_fps=_must_int(defaults_raw.get("video_fps", DEFAULT_VIDEO_FPS), "defaults.video_fps"),
     )
 
     paths_raw = raw.get("paths") or {}
@@ -302,9 +315,11 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
         raise SystemExit("--download-video requires --dir-num and --media-num")
 
     page_item_cnt = int(args.page_item_cnt)
-    if (args.download_page or args.list_media_page or args.list_media_all) and page_item_cnt >= 50:
-        print(f"Warning: camera rejects --page-item-cnt >= 50; clamping {page_item_cnt} -> 45")
-        page_item_cnt = 45
+    if (args.download_page or args.list_media_page or args.list_media_all) and page_item_cnt >= MAX_PAGE_ITEM_CNT_EXCLUSIVE:
+        print(
+            f"Warning: camera rejects --page-item-cnt >= {MAX_PAGE_ITEM_CNT_EXCLUSIVE}; clamping {page_item_cnt} -> {DEFAULT_PAGE_ITEM_CNT}"
+        )
+        page_item_cnt = DEFAULT_PAGE_ITEM_CNT
 
     op = ""
     for name in (
