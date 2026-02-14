@@ -42,12 +42,11 @@ The header includes fields that match the requested media:
 
 ## Output
 
-The client writes:
-- `download.jpg`: the best extracted JPEG for the requested `(dirNum, mediaNum)`.
+The client writes to the stable output layout:
+- `out/media/<dirNum>/media####.jpg` for the requested `(dirNum, mediaNum)`.
 
 ## Reference Implementation
 
 Relevant code:
 - `flows.send_photo_download_flow()`
 - `protocol.parse_artemis_records_strict()`
-

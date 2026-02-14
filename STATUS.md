@@ -5,7 +5,7 @@
 - Join camera AP via `nmcli`.
 - UDP handshake + login to obtain `login_token_u32`.
 - Media list (`cmdId=768`) and thumbnails (`cmdId=772`).
-- Photo download (`cmdId=1285`) and reconstruction of full-resolution JPEG (saved as `download.jpg`).
+- Photo download (`cmdId=1285`) and reconstruction of full-resolution JPEG.
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
@@ -22,6 +22,11 @@ rename the "defaults" section
 2. Use alias (front/back, or whatever is defined in config.yaml) to connect to camera instead of SSID or MAC.
 
 3. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
+
+4. Docs and Cleanup
+Update docs to reflect current architecture:
+- CLI/config parsing now lives in `src/config.py` (not `src/runner_inputs.py`).
+- Commands own behavior; flows should trend toward packet-level helpers.
 
 
 
@@ -80,7 +85,7 @@ rename the "defaults" section
 # quick testing note
 
 ran:
-python3 trailcam_client.py --ssid TrailCam_5DBD --list-media-all 
+python3 trailcam_client.py --ssid TrailCam_5DBD --list-media-all
 
 appeared to work and get all contents after quite some time (10+ minutes?)
 more output than the terminal buffer stored, but here's the tail end:

@@ -31,7 +31,7 @@ This describes the high-level operation sequences the client performs.
 - Parse strict ARTEMIS records inside the reassembled stream.
 - For matching `dirNum/mediaNum`, extract JPEG from record payload:
   - Record payload includes a 72-byte header; the JPEG bytes begin at `payload[72:]`.
-- Write `download.jpg` to the output directory.
+- Write to the stable output layout: `out/media/<dirNum>/media####.jpg`.
 
 ## Download Video (cmdId=769/cmdId=770 + bulk transfer)
 - Send `cmdId=769` start-play request for `(dirNum, mediaNum, fileType=1)`.
