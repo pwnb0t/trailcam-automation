@@ -37,6 +37,8 @@ Change --download-photo and --download-video to be --download-single MEDIA_NUM (
 
 Check how --list-max-pages works. Does it force listing 200 or does it know when to stop?
 
+rename the "defaults" section
+
 
 
 ## Potential Steps
