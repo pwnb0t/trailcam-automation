@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Optional
 
-from ble import ble_wake_and_get_creds
+from src.connection.ble import ble_wake_and_get_creds
 from src.client import TrailCamClient
 from src.flows import (
     handshake_prelude,
