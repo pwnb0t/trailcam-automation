@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List
 
 from src.flows import (
@@ -11,14 +10,7 @@ from src.flows import (
 )
 from src.session import TrailCamSession
 from src.command.command import Command, CommandError
-
-
-def _media_file_path(out_root: str, dir_num: int, media_num: int, file_type: int) -> str:
-    # Stable NAS-friendly layout: out/media/<dirNum>/media####.<ext>
-    ext = ".mp4" if int(file_type) == 1 else ".jpg"
-    p = Path(out_root) / str(int(dir_num))
-    p.mkdir(parents=True, exist_ok=True)
-    return str(p / f"media{int(media_num):04d}{ext}")
+from src.command.path_utils import media_file_path
 
 
 @dataclass
@@ -102,7 +94,7 @@ class DownloadMediaPageCommand(Command):
         for idx, entry in enumerate(videos, start=1):
             dir_num = int(entry["dirNum"])
             media_num = int(entry["mediaNum"])
-            out_mp4 = _media_file_path(out_root, dir_num, media_num, file_type=1)
+            out_mp4 = media_file_path(out_root, dir_num, media_num, file_type=1)
             print(f"[video {idx}/{len(videos)}] dir={dir_num} media={media_num}")
             send_video_download_flow(
                 client,

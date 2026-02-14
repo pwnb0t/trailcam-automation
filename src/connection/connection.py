@@ -83,6 +83,9 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
             wifi_ssid=ssid_expected,
             wifi_pwd=wifi_pwd,
             debug=cfg.debug,
+            target_dir_num=cfg.dir_num,
+            target_media_num=cfg.media_num,
+            target_video_out=str(cfg.video_out or ""),
         )
     except Exception:
         client.close()

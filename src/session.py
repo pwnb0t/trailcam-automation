@@ -23,3 +23,9 @@ class TrailCamSession:
     wifi_ssid: str
     wifi_pwd: Optional[str] = None
     debug: bool = False
+
+    # Operation inputs. These come from CLI/env config (RunnerConfig), but are convenient
+    # to keep on the session so Command objects can be constructed as Command(session).
+    target_dir_num: Optional[int] = None
+    target_media_num: Optional[int] = None
+    target_video_out: str = ""
