@@ -1079,13 +1079,10 @@ def fetch_media_list_page(session: TrailCamSession) -> List[Dict[str, Any]]:
 
 
 def _fetch_media_list_all_client(
-    client: TrailCamClient,
-    token: int,
-    item_cnt_per_page: int = 45,
-    max_pages: int = 200,
+    session: TrailCamSession,
+    *,
     stop_on_repeat_pages: int = 2,
     stop_on_no_new_pages: int = 2,
-    debug: bool = False,
 ) -> List[Dict[str, Any]]:
     """Fetch pages until empty or repeated content.
 
@@ -1094,6 +1091,12 @@ def _fetch_media_list_all_client(
     - We observe the exact same set of (dirNum, mediaNum, fileType) for N consecutive pages.
     - We observe N consecutive pages with no new keys compared to previous pages.
     """
+    client = session.client
+    token = int(session.login_token_u32)
+    item_cnt_per_page = int(session.defaults.page_item_cnt)
+    max_pages = int(session.defaults.list_max_pages)
+    debug = bool(session.debug)
+
     all_entries: List[Dict[str, Any]] = []
     seen: set[tuple[int, int, int]] = set()
     last_page_keys: Optional[set[tuple[int, int, int]]] = None
@@ -1145,13 +1148,7 @@ def _fetch_media_list_all_client(
 
 def fetch_media_list_all(session: TrailCamSession) -> List[Dict[str, Any]]:
     """Fetch all pages until stop condition using session defaults."""
-    return _fetch_media_list_all_client(
-        session.client,
-        int(session.login_token_u32),
-        item_cnt_per_page=int(session.defaults.page_item_cnt),
-        max_pages=int(session.defaults.list_max_pages),
-        debug=bool(session.debug),
-    )
+    return _fetch_media_list_all_client(session)
 
 
 def download_photo_page(session: TrailCamSession, *, limit: int = 12) -> List[Dict[str, Any]]:
