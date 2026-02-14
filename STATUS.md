@@ -12,22 +12,6 @@
 1. App restructure
 * Use the new AppConfig (config.py) class throughout the app.
 
-* Connection logic (partly done I think in connection.py, but I'm not sure I see it being used)
-  * Currently does BLE wake -> AP join -> UDP handshake -> login.
-  * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
-  * In this case, it should instead go back to BLE wake.
-  * I would like it if all of this was contained in its own class/step before moving forward.
-
-# here's an example look of what I mean by app restructure
-async def main():
-  cfg = parse_env_and_args_to_config()
-  session = await connect_and_login(cfg)
-  if cfg.download_page: # (or maybe cfg.op.download_page)
-    cmd = DownloadMediaPageCommand(session) # session should contain all the required info needed; the Command class validates that.
-    #cmd.validate() # potentially run the validation here instead if that makes more sense. Ensure it has all the necessary info to run.
-    results = cmd.run()
-    # print results like before
-
 2. Config
 Remove --page-no from env
 Change env
@@ -42,6 +26,10 @@ rename the "defaults" section
 
 
 ## Potential Steps
+* Connection logic (partly done I think in connection.py, but I'm not sure I see it being used)
+  * Currently does BLE wake -> AP join -> UDP handshake -> login.
+  * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
+  * In this case, it should instead go back to BLE wake.
 * Add a .env or env.yml file to store the various settings of the client
     * Add trailcams to env. Have "front" "back" aliases and then MAC in the env.
     * I think I want most "default" options to be configurable from this env. The "single download" and others like that should still be script options.
