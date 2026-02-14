@@ -7,7 +7,7 @@ from src.command.download_photo_command import DownloadPhotoCommand
 from src.command.download_video_command import DownloadVideoCommand
 from src.command.list_media_all_command import ListMediaAllCommand
 from src.command.list_media_page_command import ListMediaPageCommand
-from src.runner_inputs import parse_env_and_args_to_config
+from src.config import parse_env_and_args_to_config
 
 
 async def main():

@@ -9,7 +9,7 @@ from src.connection.ble import ble_wake_and_get_creds
 from src.client import TrailCamClient
 from src.constants import CAMERA_IP, CAMERA_PASSWORD, CAMERA_USERNAME
 from src.protocol import make_ack_body_seq_list16, unpack_f1
-from src.runner_inputs import RunnerConfig
+from src.config import RunnerConfig
 from src.session import TrailCamSession
 
 
