@@ -828,71 +828,8 @@ def fetch_media_list_page(session: TrailCamSession) -> List[Dict[str, Any]]:
     return _fetch_media_list_page_client(session)
 
 
-def _fetch_media_list_all_client(
-    session: TrailCamSession,
-    *,
-    stop_on_repeat_pages: int = 2,
-    stop_on_no_new_pages: int = 2,
-) -> List[Dict[str, Any]]:
-    """Fetch pages until empty or repeated content.
-
-    We stop if:
-    - A page returns no entries, or
-    - We observe the exact same set of (dirNum, mediaNum, fileType) for N consecutive pages.
-    - We observe N consecutive pages with no new keys compared to previous pages.
-    """
-    client = session.client
-    token = int(session.login_token_u32)
-    item_cnt_per_page = int(session.defaults.page_item_cnt)
-    max_pages = int(session.defaults.list_max_pages)
-    debug = bool(session.debug)
-
-    all_entries: List[Dict[str, Any]] = []
-    seen: set[tuple[int, int, int]] = set()
-    last_page_keys: Optional[set[tuple[int, int, int]]] = None
-    repeat_pages = 0
-    no_new_pages = 0
-
-    for page_no in range(0, max_pages):
-        page = _fetch_media_list_page_client(session, page_no=page_no, item_cnt_per_page=item_cnt_per_page)
-        if not page:
-            break
-
-        keys = {(e["dirNum"], e["mediaNum"], int(e.get("fileType", 0))) for e in page}
-        new_keys = keys - seen
-        if not new_keys:
-            no_new_pages += 1
-        else:
-            no_new_pages = 0
-        if debug:
-            print(
-                f"Media list page {page_no}: entries={len(page)} new={len(new_keys)} "
-                f"repeat_pages={repeat_pages} no_new_pages={no_new_pages}"
-            )
-
-        if last_page_keys is not None and keys == last_page_keys:
-            repeat_pages += 1
-        else:
-            repeat_pages = 0
-        last_page_keys = keys
-        if repeat_pages >= stop_on_repeat_pages:
-            break
-        if no_new_pages >= stop_on_no_new_pages:
-            break
-
-        for e in page:
-            k = (e["dirNum"], e["mediaNum"], int(e.get("fileType", 0)))
-            if k in seen:
-                continue
-            seen.add(k)
-            all_entries.append(e)
-
-    return all_entries
-
-
 def fetch_media_list_all(session: TrailCamSession) -> List[Dict[str, Any]]:
-    """Fetch all pages until stop condition using session defaults."""
-    return _fetch_media_list_all_client(session)
+    raise RuntimeError("fetch_media_list_all() moved to ListMediaAllCommand; call that instead")
 
 
 def download_photo_page(session: TrailCamSession, *, limit: int = 12) -> List[Dict[str, Any]]:

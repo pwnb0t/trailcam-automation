@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from src.command.command import Command, CommandError
-from src.flows import fetch_media_list_all
+from src.flows import _fetch_media_list_page_client
 from src.session import TrailCamSession
 
 
@@ -25,5 +25,50 @@ class ListMediaAllCommand(Command):
 
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
-        s = self.session
-        return fetch_media_list_all(s)
+        session = self.session
+
+        all_entries: List[Dict[str, Any]] = []
+        seen: set[tuple[int, int, int]] = set()
+        last_page_keys = None
+        repeat_pages = 0
+        no_new_pages = 0
+
+        item_cnt_per_page = int(session.defaults.page_item_cnt)
+        max_pages = int(session.defaults.list_max_pages)
+        debug = bool(session.debug)
+
+        for page_no in range(0, max_pages):
+            page = _fetch_media_list_page_client(session, page_no=page_no, item_cnt_per_page=item_cnt_per_page)
+            if not page:
+                break
+
+            keys = {(e["dirNum"], e["mediaNum"], int(e.get("fileType", 0))) for e in page}
+            new_keys = keys - seen
+            if not new_keys:
+                no_new_pages += 1
+            else:
+                no_new_pages = 0
+            if debug:
+                print(
+                    f"Media list page {page_no}: entries={len(page)} new={len(new_keys)} "
+                    f"repeat_pages={repeat_pages} no_new_pages={no_new_pages}"
+                )
+
+            if last_page_keys is not None and keys == last_page_keys:
+                repeat_pages += 1
+            else:
+                repeat_pages = 0
+            last_page_keys = keys
+            if repeat_pages >= 2:
+                break
+            if no_new_pages >= 2:
+                break
+
+            for e in page:
+                k = (e["dirNum"], e["mediaNum"], int(e.get("fileType", 0)))
+                if k in seen:
+                    continue
+                seen.add(k)
+                all_entries.append(e)
+
+        return all_entries
