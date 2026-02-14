@@ -629,28 +629,29 @@ def _parse_artemis_v4_payload_header(payload: bytes) -> Optional[Dict[str, int]]
     }
 
 
-def _send_video_download_flow_client(
-    client: TrailCamClient,
-    token: int,
+def send_video_download_flow_item(
+    session: TrailCamSession,
     dir_num: int,
     media_num: int,
-    file_type: int = 1,
-    fps: int = 30,
-    listen_s: float = 45.0,
-    idle_break_s: float = 2.0,
-    out_mp4_path: str = "out/media/video.mp4",
-    temp_root: str = "out/tmp",
-    debug: bool = False,
-):
-    """Start playback for a gallery video and reconstruct an MP4 (H.264 + AAC).
+    *,
+    out_mp4_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Start playback for a gallery video and reconstruct an MP4 (H.264 + AAC)."""
+    client = session.client
+    token = int(session.login_token_u32)
+    file_type = 1
+    fps = int(session.defaults.video_fps)
+    listen_s = float(session.defaults.download_listen_s)
+    idle_break_s = float(session.defaults.download_idle_s)
+    debug = bool(session.debug)
 
-    Implementation notes:
-    - Sends cmdId=769 (start play record), then listens on D0 subtype=0x02.
-    - For ver=4 records, decrypts the per-page AES-CBC prefix bytes and writes:
-      - decrypted H.264 Annex-B stream to a temp *.h264
-      - decrypted ADTS AAC stream to a temp *.aac
-    - Muxes to final destination via ffmpeg.
-    """
+    if not out_mp4_path:
+        out_mp4_path = str(_media_file_path(str(session.paths.media_out_dir), dir_num, media_num, file_type=1))
+
+    # Avoid /tmp on small devices (often tmpfs) by default.
+    temp_root_p = Path(str(session.paths.tmp_dir))
+    temp_root_p.mkdir(parents=True, exist_ok=True)
+
     # Session number: app provides one; we generate a stable-ish u16.
     session_no = int(time.time() * 1000) & 0xFFFF
     start_req = {
@@ -665,10 +666,6 @@ def _send_video_download_flow_client(
 
     out_mp4 = Path(out_mp4_path)
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
-
-    # Avoid /tmp on small devices (often tmpfs) by default.
-    temp_root_p = Path(temp_root)
-    temp_root_p.mkdir(parents=True, exist_ok=True)
 
     stop_hb = threading.Event()
     hb_sent = 0
@@ -698,14 +695,13 @@ def _send_video_download_flow_client(
     last_data_ts: Optional[float] = None
     end = time.time() + listen_s
 
-    with tempfile.TemporaryDirectory(
-        prefix=f"trailcam_video_{dir_num}_{media_num}_",
-        dir=str(temp_root_p),
-    ) as tmp_dir:
+    with tempfile.TemporaryDirectory(prefix=f"trailcam_video_{dir_num}_{media_num}_", dir=str(temp_root_p)) as tmp_dir:
         tmp_root = Path(tmp_dir)
         tmp_h264 = tmp_root / "video.h264"
         tmp_aac = tmp_root / "audio.aac"
 
+        v_cnt = 0
+        a_cnt = 0
         try:
             while time.time() < end:
                 got = client.recv()
@@ -738,8 +734,7 @@ def _send_video_download_flow_client(
                         continue
 
                 # Control plane JSON
-                objs = client.handle_incoming_payload(data)
-                for obj in objs:
+                for obj in client.handle_incoming_payload(data):
                     if debug:
                         print("RX JSON:", obj)
                     if obj.get("cmdId") == 769 or "startPbRet" in obj:
@@ -756,9 +751,6 @@ def _send_video_download_flow_client(
             # Decode + decrypt ver=4 payload data.
             v_h264 = bytearray()
             a_aac = bytearray()
-            v_cnt = 0
-            a_cnt = 0
-
             for ver, _typ, payload in records:
                 if ver != 4:
                     continue
@@ -838,32 +830,8 @@ def _send_video_download_flow_client(
         "video_records": v_cnt,
         "audio_records": a_cnt,
         "subtype02_chunks": len(chunks02),
+        "start_play_info": start_play_info,
     }
-
-
-def send_video_download_flow_item(
-    session: TrailCamSession,
-    dir_num: int,
-    media_num: int,
-    *,
-    out_mp4_path: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Download a video (dir/media) and write it to the stable output layout."""
-    if not out_mp4_path:
-        out_mp4_path = str(_media_file_path(str(session.paths.media_out_dir), dir_num, media_num, file_type=1))
-    return _send_video_download_flow_client(
-        session.client,
-        int(session.login_token_u32),
-        dir_num=dir_num,
-        media_num=media_num,
-        file_type=1,
-        fps=int(session.defaults.video_fps),
-        listen_s=float(session.defaults.download_listen_s),
-        idle_break_s=float(session.defaults.download_idle_s),
-        out_mp4_path=str(out_mp4_path),
-        temp_root=str(session.paths.tmp_dir),
-        debug=bool(session.debug),
-    )
 
 
 def send_video_download_flow(session: TrailCamSession) -> Dict[str, Any]:
