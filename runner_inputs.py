@@ -58,7 +58,7 @@ class EnvDefaults:
     tmp_dir: str = "out/tmp"
 
     page_no: int = 0
-    page_item_cnt: int = 45
+    page_item_cnt: int = 48
     list_max_pages: int = 200
 
     download_listen_s: float = 45.0
@@ -78,7 +78,7 @@ class EnvDefaults:
             media_out_dir=_env("TRAILCAM_MEDIA_OUT_DIR") or _default_media_out_dir(),
             tmp_dir=_env("TRAILCAM_TMP_DIR") or "out/tmp",
             page_no=_env_int("TRAILCAM_PAGE_NO") or 0,
-            page_item_cnt=_env_int("TRAILCAM_PAGE_ITEM_CNT") or 45,
+            page_item_cnt=_env_int("TRAILCAM_PAGE_ITEM_CNT") or 48,
             list_max_pages=_env_int("TRAILCAM_LIST_MAX_PAGES") or 200,
             download_listen_s=_env_float("TRAILCAM_DOWNLOAD_LISTEN_S") or 45.0,
             download_idle_s=_env_float("TRAILCAM_DOWNLOAD_IDLE_S") or 4.0,

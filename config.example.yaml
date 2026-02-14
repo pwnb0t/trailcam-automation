@@ -12,7 +12,7 @@ defaults:
   udp_local_port: 16734
 
   page_no: 0
-  page_item_cnt: 45
+  page_item_cnt: 48
   list_max_pages: 200
 
   download_listen_s: 45.0
