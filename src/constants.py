@@ -8,7 +8,7 @@ CAMERA_PASSWORD = "admin"
 
 # Default runtime tunables (used by config parsing; overridden by config.yaml, then CLI where allowed)
 DEFAULT_PAGE_NO = 0
-DEFAULT_PAGE_ITEM_CNT = 45
+DEFAULT_PAGE_ITEM_CNT = 48
 DEFAULT_LIST_MAX_PAGES = 200
 DEFAULT_DOWNLOAD_LISTEN_S = 45.0
 DEFAULT_DOWNLOAD_IDLE_S = 4.0

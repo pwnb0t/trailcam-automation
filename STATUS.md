@@ -9,12 +9,8 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. App restructure
-* Use the new AppConfig (config.py) class throughout the app.
-
-2. Config
-Remove --page-no from env
-Change env
+1. Config
+Remove --page-no from config.yaml
 
 Change --download-photo and --download-video to be --download-single MEDIA_NUM (remove --media-num)
 --dir-num should default to 100
@@ -22,6 +18,11 @@ Change --download-photo and --download-video to be --download-single MEDIA_NUM (
 Check how --list-max-pages works. Does it force listing 200 or does it know when to stop?
 
 rename the "defaults" section
+
+2. Use alias (front/back, or whatever is defined in config.yaml) to connect to camera instead of SSID or MAC.
+
+3. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
+
 
 
 

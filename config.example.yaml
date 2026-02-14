@@ -2,7 +2,7 @@ version: 1
 
 # Cameras can be referenced by alias (e.g. --camera front).
 cameras:
-  front:
+  back:
     ble_address: "C6:1E:0D:E0:0C:FB"
     ssid: "TrailCam_5DBD"
 
@@ -15,7 +15,7 @@ defaults:
   page_item_cnt: 48
   list_max_pages: 200
 
-  download_listen_s: 45.0
+  download_listen_s: 48.0
   download_idle_s: 4.0
 
   video_fps: 30
