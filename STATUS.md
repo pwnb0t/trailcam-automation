@@ -26,7 +26,6 @@ async def main():
     cmd = DownloadMediaPageCommand(session) # session should contain all the required info needed; the Command class validates that.
     #cmd.validate() # potentially run the validation here instead if that makes more sense. Ensure it has all the necessary info to run.
     results = cmd.run()
-    results = download_media_page(session)
     # print results like before
 
 

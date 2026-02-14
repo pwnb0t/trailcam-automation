@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 
 from client import TrailCamClient
 from constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
-from session import TrailCamSession
 from protocol import (
     decrypt_artemis_json,
     decrypt_cmd_b64,
@@ -1189,99 +1188,9 @@ def download_photo_page(
 
 
 def download_media_page(
-    session: TrailCamSession,
-) -> List[Dict[str, Any]]:
-    """Download all media entries returned in a single media-list page.
-
-    This consumes all runtime and default settings from the session.
-    """
-    client = session.client
-    token = int(session.login_token_u32)
-    page_no = int(session.defaults.page_no)
-    item_cnt_per_page = int(session.defaults.page_item_cnt)
-    out_root = str(session.paths.media_out_dir)
-    temp_root = str(session.paths.tmp_dir)
-    listen_s = float(session.defaults.download_listen_s)
-    idle_break_s = float(session.defaults.download_idle_s)
-    video_fps = int(session.defaults.video_fps)
-
-    # Camera returns an error if itemCntPerPage >= 50 ("need less than 50").
-    if item_cnt_per_page >= 50:
-        item_cnt_per_page = 45
-
-    debug = bool(getattr(session, "debug", False))
-
-    entries = fetch_media_list_page(
-        client,
-        token,
-        page_no=page_no,
-        item_cnt_per_page=item_cnt_per_page,
-        debug=debug,
-    )
-    if not entries:
-        print("No media entries found on requested page.")
-        return []
-
-    photos = [e for e in entries if _is_photo_entry(e)]
-    videos = [e for e in entries if _is_video_entry(e)]
-
-    results: List[Dict[str, Any]] = []
-    if photos:
-        print(f"Downloading {len(photos)} photo(s) from page {page_no} into {out_root} ...")
-    for idx, entry in enumerate(photos, start=1):
-        dir_num = int(entry["dirNum"])
-        media_num = int(entry["mediaNum"])
-        print(f"[photo {idx}/{len(photos)}] dir={dir_num} media={media_num}")
-        out_path = download_photo_to_out(
-            client,
-            token,
-            dir_num=dir_num,
-            media_num=media_num,
-            out_root=out_root,
-            listen_s=listen_s,
-            idle_break_s=idle_break_s,
-            temp_root=temp_root,
-            debug=debug,
-        )
-        results.append(
-            {
-                "kind": "photo",
-                "dirNum": dir_num,
-                "mediaNum": media_num,
-                "path": str(out_path) if out_path else None,
-            }
-        )
-
-    if videos:
-        print(f"Downloading {len(videos)} video(s) from page {page_no} into {out_root} ...")
-    for idx, entry in enumerate(videos, start=1):
-        dir_num = int(entry["dirNum"])
-        media_num = int(entry["mediaNum"])
-        out_mp4 = _media_file_path(out_root, dir_num, media_num, file_type=1)
-        print(f"[video {idx}/{len(videos)}] dir={dir_num} media={media_num}")
-        send_video_download_flow(
-            client,
-            token,
-            dir_num=dir_num,
-            media_num=media_num,
-            file_type=1,
-            fps=video_fps,
-            listen_s=listen_s,
-            idle_break_s=idle_break_s,
-            out_mp4_path=str(out_mp4),
-            temp_root=temp_root,
-            debug=debug,
-        )
-        results.append(
-            {
-                "kind": "video",
-                "dirNum": dir_num,
-                "mediaNum": media_num,
-                "path": str(out_mp4),
-            }
-        )
-
-    return results
+    session,
+):
+    raise RuntimeError("download_media_page() moved to DownloadMediaPageCommand; call that instead")
 
 
 def extract_gallery_records(assembled: bytes, out_dir: Optional[str] = None):
