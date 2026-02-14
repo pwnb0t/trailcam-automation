@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from constants import DEFAULT_BLE_ADDRESS, WIFI_IFNAME
+from config import CameraConfig, DefaultsConfig, PathsConfig
 
 
 def _default_media_out_dir() -> str:
@@ -182,3 +183,74 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     Path(args.tmp_dir).mkdir(parents=True, exist_ok=True)
 
     return args
+
+
+@dataclass(frozen=True)
+class RunnerConfig:
+    camera: CameraConfig
+    defaults: DefaultsConfig
+    paths: PathsConfig
+    op: str
+    dir_num: Optional[int] = None
+    media_num: Optional[int] = None
+    video_out: str = ""
+    debug: bool = False
+
+
+def parse_env_and_args_to_config(argv: Optional[list[str]] = None) -> RunnerConfig:
+    """Parse env + CLI args and return a runner config object."""
+    args = parse_args(argv)
+
+    if (args.dir_num is not None or args.media_num is not None) and not (args.download_photo or args.download_video):
+        raise SystemExit("--dir-num/--media-num are only valid with --download-photo or --download-video")
+    if args.download_photo and (args.dir_num is None or args.media_num is None):
+        raise SystemExit("--download-photo requires --dir-num and --media-num")
+    if args.download_video and (args.dir_num is None or args.media_num is None):
+        raise SystemExit("--download-video requires --dir-num and --media-num")
+
+    page_item_cnt = int(args.page_item_cnt)
+    if (args.download_page or args.list_media_page or args.list_media_all) and page_item_cnt >= 50:
+        print(f"Warning: camera rejects --page-item-cnt >= 50; clamping {page_item_cnt} -> 45")
+        page_item_cnt = 45
+
+    op = ""
+    for name in (
+        "login_only",
+        "download_photo",
+        "download_video",
+        "download_page",
+        "list_media_page",
+        "list_media_all",
+    ):
+        if getattr(args, name):
+            op = name
+            break
+    if not op:
+        raise SystemExit(
+            "Choose an action: --login-only, --download-photo, --download-video, --download-page, "
+            "--list-media-page, --list-media-all"
+        )
+
+    camera = CameraConfig(alias="cli", ble_address=str(args.ble_address), ssid=str(args.ssid))
+    defaults = DefaultsConfig(
+        wifi_ifname=str(args.ifname),
+        udp_local_port=int(args.port),
+        page_no=int(args.page_no),
+        page_item_cnt=int(page_item_cnt),
+        list_max_pages=int(args.list_max_pages),
+        download_listen_s=float(args.download_listen_s),
+        download_idle_s=float(args.download_idle_s),
+        video_fps=int(args.video_fps),
+    )
+    paths = PathsConfig(media_out_dir=str(args.media_out_dir), tmp_dir=str(args.tmp_dir))
+
+    return RunnerConfig(
+        camera=camera,
+        defaults=defaults,
+        paths=paths,
+        op=op,
+        dir_num=(int(args.dir_num) if args.dir_num is not None else None),
+        media_num=(int(args.media_num) if args.media_num is not None else None),
+        video_out=str(args.video_out or ""),
+        debug=bool(args.debug),
+    )

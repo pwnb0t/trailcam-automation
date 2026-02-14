@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import Optional
 
 from ble import ble_wake_and_get_creds
 from client import TrailCamClient
-from config import AppConfig, CameraConfig
 from flows import (
     handshake_prelude,
     login_and_get_token,
@@ -15,21 +13,17 @@ from flows import (
     nmcli_rescan,
     wifi_has_camera_ip,
 )
+from runner_inputs import RunnerConfig
 from session import TrailCamSession
 
 
-async def connect_and_login(
-    cfg: AppConfig,
-    camera: CameraConfig,
-    *,
-    ssid_override: Optional[str] = None,
-    debug: bool = False,
-) -> TrailCamSession:
+async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
     """Full connect flow: BLE wake -> Wi-Fi join -> UDP handshake -> login.
 
     Returns a TrailCamSession containing the TrailCamClient and login token.
     """
-    ssid_expected = ssid_override or camera.ssid
+    camera = cfg.camera
+    ssid_expected = camera.ssid
 
     nmcli_rescan()
     ssids_now = nmcli_list_ssids()
@@ -75,7 +69,7 @@ async def connect_and_login(
         client.send_beacons(count=4)
         client.learn_camera_port()
         client.start_keepalive(interval_s=1.0)
-        handshake_prelude(client, debug=debug, duration_s=3.0)
+        handshake_prelude(client, debug=cfg.debug, duration_s=3.0)
         token = login_and_get_token(client)
         if token is None:
             raise RuntimeError("Login token not found")
@@ -88,7 +82,7 @@ async def connect_and_login(
             login_token_u32=token,
             wifi_ssid=ssid_expected,
             wifi_pwd=wifi_pwd,
-            debug=debug,
+            debug=cfg.debug,
         )
     except Exception:
         client.close()
