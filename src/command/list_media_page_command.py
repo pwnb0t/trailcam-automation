@@ -24,11 +24,4 @@ class ListMediaPageCommand(Command):
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
         s = self.session
-        return fetch_media_list_page(
-            s.client,
-            s.login_token_u32,
-            page_no=int(s.defaults.page_no),
-            item_cnt_per_page=int(s.defaults.page_item_cnt),
-            debug=bool(s.debug),
-        )
-
+        return fetch_media_list_page(s)

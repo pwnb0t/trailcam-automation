@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from src.client import TrailCamClient
 from src.constants import CAMERA_IP, WIFI_IFNAME, CAMERA_USERNAME, CAMERA_PASSWORD
+from src.session import TrailCamSession
 from src.protocol import (
     decrypt_payload_b64_bytes,
     decrypt_v4_media_data_pages,
@@ -559,21 +560,19 @@ def send_photo_download_flow(
     }
 
 
-def download_photo_to_out(
-    client: TrailCamClient,
-    token: int,
-    dir_num: int,
-    media_num: int,
-    out_root: str = "out/media",
-    listen_s: float = 45.0,
-    idle_break_s: float = 4.0,
-    temp_root: str = "out/tmp",
-    debug: bool = False,
-) -> Optional[Path]:
-    """Download a photo and write it to the stable output layout.
+def download_photo_to_out_item(session: TrailCamSession, dir_num: int, media_num: int) -> Optional[Path]:
+    """Download a photo (dir/media) and write it to the stable output layout.
 
-    Uses a temp dump directory under out/tmp and only keeps the final JPEG.
+    Uses a temp dump directory under session.paths.tmp_dir and only keeps the final JPEG.
     """
+    client = session.client
+    token = int(session.login_token_u32)
+    out_root = str(session.paths.media_out_dir)
+    temp_root = str(session.paths.tmp_dir)
+    listen_s = float(session.defaults.download_listen_s)
+    idle_break_s = float(session.defaults.download_idle_s)
+    debug = bool(session.debug)
+
     out_path = _media_file_path(out_root, dir_num, media_num, file_type=0)
     tmp_base = Path(temp_root) / "photo_dumps"
     tmp_base.mkdir(parents=True, exist_ok=True)
@@ -594,6 +593,13 @@ def download_photo_to_out(
             return None
         out_path.write_bytes(Path(best).read_bytes())
         return out_path
+
+
+def download_photo_to_out(session: TrailCamSession) -> Optional[Path]:
+    """Download the session's target photo and write it to the stable output layout."""
+    if session.target_dir_num is None or session.target_media_num is None:
+        raise ValueError("session.target_dir_num and session.target_media_num are required")
+    return download_photo_to_out_item(session, int(session.target_dir_num), int(session.target_media_num))
 
 
 def _parse_artemis_v4_payload_header(payload: bytes) -> Optional[Dict[str, int]]:
@@ -623,7 +629,7 @@ def _parse_artemis_v4_payload_header(payload: bytes) -> Optional[Dict[str, int]]
     }
 
 
-def send_video_download_flow(
+def _send_video_download_flow_client(
     client: TrailCamClient,
     token: int,
     dir_num: int,
@@ -835,6 +841,44 @@ def send_video_download_flow(
     }
 
 
+def send_video_download_flow_item(
+    session: TrailCamSession,
+    dir_num: int,
+    media_num: int,
+    *,
+    out_mp4_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Download a video (dir/media) and write it to the stable output layout."""
+    if not out_mp4_path:
+        out_mp4_path = str(_media_file_path(str(session.paths.media_out_dir), dir_num, media_num, file_type=1))
+    return _send_video_download_flow_client(
+        session.client,
+        int(session.login_token_u32),
+        dir_num=dir_num,
+        media_num=media_num,
+        file_type=1,
+        fps=int(session.defaults.video_fps),
+        listen_s=float(session.defaults.download_listen_s),
+        idle_break_s=float(session.defaults.download_idle_s),
+        out_mp4_path=str(out_mp4_path),
+        temp_root=str(session.paths.tmp_dir),
+        debug=bool(session.debug),
+    )
+
+
+def send_video_download_flow(session: TrailCamSession) -> Dict[str, Any]:
+    """Download the session's target video and write it to the stable output layout."""
+    if session.target_dir_num is None or session.target_media_num is None:
+        raise ValueError("session.target_dir_num and session.target_media_num are required")
+    out_mp4 = str(session.target_video_out or "").strip() or None
+    return send_video_download_flow_item(
+        session,
+        int(session.target_dir_num),
+        int(session.target_media_num),
+        out_mp4_path=out_mp4,
+    )
+
+
 def _collect_media_entries(node: Any, out: List[Dict[str, Any]]) -> None:
     if isinstance(node, dict):
         if "mediaDirNum" in node and "mediaNum" in node:
@@ -926,7 +970,7 @@ def _is_photo_entry(entry: Dict[str, Any]) -> bool:
     return True
 
 
-def fetch_media_list_page(
+def _fetch_media_list_page_client(
     client: TrailCamClient,
     token: int,
     page_no: int = 0,
@@ -1062,7 +1106,18 @@ def fetch_media_list_page(
     return entries
 
 
-def fetch_media_list_all(
+def fetch_media_list_page(session: TrailCamSession) -> List[Dict[str, Any]]:
+    """Fetch a single media-list page using session defaults."""
+    return _fetch_media_list_page_client(
+        session.client,
+        int(session.login_token_u32),
+        page_no=int(session.defaults.page_no),
+        item_cnt_per_page=int(session.defaults.page_item_cnt),
+        debug=bool(session.debug),
+    )
+
+
+def _fetch_media_list_all_client(
     client: TrailCamClient,
     token: int,
     item_cnt_per_page: int = 45,
@@ -1085,7 +1140,7 @@ def fetch_media_list_all(
     no_new_pages = 0
 
     for page_no in range(0, max_pages):
-        page = fetch_media_list_page(
+        page = _fetch_media_list_page_client(
             client,
             token,
             page_no=page_no,
@@ -1127,25 +1182,21 @@ def fetch_media_list_all(
     return all_entries
 
 
-def download_photo_page(
-    client: TrailCamClient,
-    token: int,
-    page_no: int = 0,
-    item_cnt_per_page: int = 45,
-    limit: int = 12,
-    out_root: str = "out/media",
-    listen_s: float = 45.0,
-    idle_break_s: float = 4.0,
-    temp_root: str = "out/tmp",
-    debug: bool = False,
-) -> List[Dict[str, Any]]:
-    entries = fetch_media_list_page(
-        client,
-        token,
-        page_no=page_no,
-        item_cnt_per_page=item_cnt_per_page,
-        debug=debug,
+def fetch_media_list_all(session: TrailCamSession) -> List[Dict[str, Any]]:
+    """Fetch all pages until stop condition using session defaults."""
+    return _fetch_media_list_all_client(
+        session.client,
+        int(session.login_token_u32),
+        item_cnt_per_page=int(session.defaults.page_item_cnt),
+        max_pages=int(session.defaults.list_max_pages),
+        debug=bool(session.debug),
     )
+
+
+def download_photo_page(session: TrailCamSession, *, limit: int = 12) -> List[Dict[str, Any]]:
+    """Download up to `limit` photos from the session's configured page."""
+    page_no = int(session.defaults.page_no)
+    entries = fetch_media_list_page(session)
     if not entries:
         print("No media entries found on requested page.")
         return []
@@ -1158,22 +1209,12 @@ def download_photo_page(
         return []
 
     results: List[Dict[str, Any]] = []
-    print(f"Downloading {len(photos)} photo(s) from page {page_no} into {out_root} ...")
+    print(f"Downloading {len(photos)} photo(s) from page {page_no} into {session.paths.media_out_dir} ...")
     for idx, entry in enumerate(photos, start=1):
         dir_num = int(entry.get("dirNum", entry.get("mediaDirNum")))
         media_num = int(entry.get("mediaNum"))
         print(f"[{idx}/{len(photos)}] dir={dir_num} media={media_num}")
-        out_path = download_photo_to_out(
-            client,
-            token,
-            dir_num=dir_num,
-            media_num=media_num,
-            out_root=out_root,
-            listen_s=listen_s,
-            idle_break_s=idle_break_s,
-            temp_root=temp_root,
-            debug=debug,
-        )
+        out_path = download_photo_to_out_item(session, dir_num, media_num)
         results.append(
             {
                 "dirNum": dir_num,

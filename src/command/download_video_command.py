@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 from src.command.command import Command, CommandError
-from src.command.path_utils import media_file_path
 from src.flows import send_video_download_flow
 from src.session import TrailCamSession
 
@@ -31,22 +30,6 @@ class DownloadVideoCommand(Command):
         s = self.session
         dir_num = int(s.target_dir_num)
         media_num = int(s.target_media_num)
-        out_mp4 = str(s.target_video_out or "").strip()
-        if not out_mp4:
-            out_mp4 = media_file_path(str(s.paths.media_out_dir), dir_num, media_num, file_type=1)
-
-        send_video_download_flow(
-            s.client,
-            s.login_token_u32,
-            dir_num=dir_num,
-            media_num=media_num,
-            file_type=1,
-            fps=int(s.defaults.video_fps),
-            listen_s=float(s.defaults.download_listen_s),
-            idle_break_s=float(s.defaults.download_idle_s),
-            out_mp4_path=str(out_mp4),
-            temp_root=str(s.paths.tmp_dir),
-            debug=bool(s.debug),
-        )
-        return {"kind": "video", "dirNum": dir_num, "mediaNum": media_num, "path": str(out_mp4)}
-
+        res = send_video_download_flow(s)
+        out_mp4 = str(res.get("out_mp4") or "")
+        return {"kind": "video", "dirNum": dir_num, "mediaNum": media_num, "path": out_mp4}

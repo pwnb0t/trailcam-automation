@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from src.command.command import Command, CommandError
 from src.flows import download_photo_to_out
@@ -28,21 +28,10 @@ class DownloadPhotoCommand(Command):
     def run(self) -> Dict[str, Any]:
         self.validate()
         s = self.session
-        out_path = download_photo_to_out(
-            s.client,
-            s.login_token_u32,
-            dir_num=int(s.target_dir_num),
-            media_num=int(s.target_media_num),
-            out_root=str(s.paths.media_out_dir),
-            listen_s=float(s.defaults.download_listen_s),
-            idle_break_s=float(s.defaults.download_idle_s),
-            temp_root=str(s.paths.tmp_dir),
-            debug=bool(s.debug),
-        )
+        out_path = download_photo_to_out(s)
         return {
             "kind": "photo",
             "dirNum": int(s.target_dir_num),
             "mediaNum": int(s.target_media_num),
             "path": str(out_path) if out_path else None,
         }
-

@@ -26,11 +26,4 @@ class ListMediaAllCommand(Command):
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
         s = self.session
-        return fetch_media_list_all(
-            s.client,
-            s.login_token_u32,
-            item_cnt_per_page=int(s.defaults.page_item_cnt),
-            max_pages=int(s.defaults.list_max_pages),
-            debug=bool(s.debug),
-        )
-
+        return fetch_media_list_all(s)

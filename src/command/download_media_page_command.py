@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from src.flows import (
-    download_photo_to_out,
+    download_photo_to_out_item,
     fetch_media_list_page,
-    send_video_download_flow,
+    send_video_download_flow_item,
 )
 from src.session import TrailCamSession
 from src.command.command import Command, CommandError
@@ -33,28 +33,9 @@ class DownloadMediaPageCommand(Command):
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
         s = self.session
-        client = s.client
-        token = int(s.login_token_u32)
         page_no = int(s.defaults.page_no)
-        item_cnt_per_page = int(s.defaults.page_item_cnt)
         out_root = str(s.paths.media_out_dir)
-        temp_root = str(s.paths.tmp_dir)
-        listen_s = float(s.defaults.download_listen_s)
-        idle_break_s = float(s.defaults.download_idle_s)
-        video_fps = int(s.defaults.video_fps)
-        debug = bool(getattr(s, "debug", False))
-
-        # Camera returns an error if itemCntPerPage >= 50 ("need less than 50").
-        if item_cnt_per_page >= 50:
-            item_cnt_per_page = 45
-
-        entries = fetch_media_list_page(
-            client,
-            token,
-            page_no=page_no,
-            item_cnt_per_page=item_cnt_per_page,
-            debug=debug,
-        )
+        entries = fetch_media_list_page(s)
         if not entries:
             print("No media entries found on requested page.")
             return []
@@ -69,17 +50,7 @@ class DownloadMediaPageCommand(Command):
             dir_num = int(entry["dirNum"])
             media_num = int(entry["mediaNum"])
             print(f"[photo {idx}/{len(photos)}] dir={dir_num} media={media_num}")
-            out_path = download_photo_to_out(
-                client,
-                token,
-                dir_num=dir_num,
-                media_num=media_num,
-                out_root=out_root,
-                listen_s=listen_s,
-                idle_break_s=idle_break_s,
-                temp_root=temp_root,
-                debug=debug,
-            )
+            out_path = download_photo_to_out_item(s, dir_num, media_num)
             results.append(
                 {
                     "kind": "photo",
@@ -96,19 +67,7 @@ class DownloadMediaPageCommand(Command):
             media_num = int(entry["mediaNum"])
             out_mp4 = media_file_path(out_root, dir_num, media_num, file_type=1)
             print(f"[video {idx}/{len(videos)}] dir={dir_num} media={media_num}")
-            send_video_download_flow(
-                client,
-                token,
-                dir_num=dir_num,
-                media_num=media_num,
-                file_type=1,
-                fps=video_fps,
-                listen_s=listen_s,
-                idle_break_s=idle_break_s,
-                out_mp4_path=str(out_mp4),
-                temp_root=temp_root,
-                debug=debug,
-            )
+            send_video_download_flow_item(s, dir_num, media_num, out_mp4_path=str(out_mp4))
             results.append(
                 {
                     "kind": "video",
