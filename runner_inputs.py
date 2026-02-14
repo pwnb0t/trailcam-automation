@@ -100,17 +100,6 @@ def build_parser(env: EnvDefaults) -> argparse.ArgumentParser:
         required=(env.ssid is None),
         help="Camera AP SSID to connect to (required unless TRAILCAM_SSID is set)",
     )
-    parser.add_argument(
-        "--ifname",
-        default=env.ifname,
-        help="Wi-Fi interface to use (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=env.port,
-        help="Local UDP port to bind (default: %(default)s)",
-    )
     parser.add_argument("--debug", action="store_true", help="Enable verbose logging of incoming packets")
 
     action = parser.add_mutually_exclusive_group()
@@ -150,20 +139,6 @@ def build_parser(env: EnvDefaults) -> argparse.ArgumentParser:
     parser.add_argument("--dir-num", type=int, default=None, help="Media directory number (e.g. 102)")
     parser.add_argument("--media-num", type=int, default=None, help="Media number (e.g. 940)")
 
-    parser.add_argument(
-        "--download-listen-s",
-        type=float,
-        default=env.download_listen_s,
-        help="Seconds to listen for bulk download/playback data (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--download-idle-s",
-        type=float,
-        default=env.download_idle_s,
-        help="Stop capture after this many seconds of idle (default: %(default)s)",
-    )
-
-    parser.add_argument("--video-fps", type=int, default=env.video_fps, help="FPS hint for ffmpeg mux (default: %(default)s)")
     parser.add_argument("--video-out", default=env.video_out, help="Explicit output MP4 path for --download-video")
 
     return parser
@@ -173,6 +148,14 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     env = EnvDefaults.from_env()
     parser = build_parser(env)
     args = parser.parse_args(argv)
+
+    # Config-only settings (env defaults for now).
+    # We still attach them to args so downstream config-building code can be simple.
+    args.ifname = env.ifname
+    args.port = env.port
+    args.download_listen_s = env.download_listen_s
+    args.download_idle_s = env.download_idle_s
+    args.video_fps = env.video_fps
 
     # Normalize: allow "config.yml" naming for humans without changing code.
     if args.ssid:
