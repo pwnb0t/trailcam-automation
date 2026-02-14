@@ -28,7 +28,14 @@ async def main():
     results = cmd.run()
     # print results like before
 
+2. Config
+Remove --page-no from env
+Change env
 
+Change --download-photo and --download-video to be --download-single MEDIA_NUM (remove --media-num)
+--dir-num should default to 100
+
+Check how --list-max-pages works. Does it force listing 200 or does it know when to stop?
 
 
 
