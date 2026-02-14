@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from src.command.command import Command, CommandError
-from src.flows import _fetch_media_list_page_client
+from src.flows import fetch_media_list_page
 from src.session import TrailCamSession
 
 
@@ -38,7 +38,7 @@ class ListMediaAllCommand(Command):
         debug = bool(session.debug)
 
         for page_no in range(0, max_pages):
-            page = _fetch_media_list_page_client(session, page_no=page_no, item_cnt_per_page=item_cnt_per_page)
+            page = fetch_media_list_page(session, page_no=page_no, item_cnt_per_page=item_cnt_per_page)
             if not page:
                 break
 

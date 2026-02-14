@@ -675,7 +675,7 @@ def _is_photo_entry(entry: Dict[str, Any]) -> bool:
     return True
 
 
-def _fetch_media_list_page_client(
+def fetch_media_list_page(
     session: TrailCamSession,
     *,
     page_no: Optional[int] = None,
@@ -816,14 +816,3 @@ def _fetch_media_list_page_client(
     if not entries and last_media_list_error:
         print(f"Media list error: {last_media_list_error}")
     return entries
-
-
-def fetch_media_list_page(session: TrailCamSession) -> List[Dict[str, Any]]:
-    """Fetch a single media-list page using session defaults."""
-    return _fetch_media_list_page_client(session)
-
-
-def fetch_media_list_all(session: TrailCamSession) -> List[Dict[str, Any]]:
-    raise RuntimeError("fetch_media_list_all() moved to ListMediaAllCommand; call that instead")
-
-
