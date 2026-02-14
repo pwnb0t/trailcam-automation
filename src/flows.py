@@ -317,13 +317,8 @@ def download_photo_to_out_item(session: TrailCamSession, dir_num: int, media_num
 
     Uses a temp dump directory under session.paths.tmp_dir and only keeps the final JPEG.
     """
-    client = session.client
-    token = int(session.login_token_u32)
     out_root = str(session.paths.media_out_dir)
     temp_root = str(session.paths.tmp_dir)
-    listen_s = float(session.defaults.download_listen_s)
-    idle_break_s = float(session.defaults.download_idle_s)
-    debug = bool(session.debug)
 
     out_path = _media_file_path(out_root, dir_num, media_num, file_type=0)
     tmp_base = Path(temp_root) / "photo_dumps"
@@ -832,64 +827,3 @@ def fetch_media_list_all(session: TrailCamSession) -> List[Dict[str, Any]]:
     raise RuntimeError("fetch_media_list_all() moved to ListMediaAllCommand; call that instead")
 
 
-def download_photo_page(session: TrailCamSession, *, limit: int = 12) -> List[Dict[str, Any]]:
-    """Download up to `limit` photos from the session's configured page."""
-    page_no = int(session.defaults.page_no)
-    entries = fetch_media_list_page(session)
-    if not entries:
-        print("No media entries found on requested page.")
-        return []
-
-    photos = [e for e in entries if _is_photo_entry(e)]
-    # Preserve camera order (typically newest-first) and cap by limit.
-    photos = photos[:limit]
-    if not photos:
-        print("No photo entries found on requested page.")
-        return []
-
-    results: List[Dict[str, Any]] = []
-    print(f"Downloading {len(photos)} photo(s) from page {page_no} into {session.paths.media_out_dir} ...")
-    for idx, entry in enumerate(photos, start=1):
-        dir_num = int(entry.get("dirNum", entry.get("mediaDirNum")))
-        media_num = int(entry.get("mediaNum"))
-        print(f"[{idx}/{len(photos)}] dir={dir_num} media={media_num}")
-        out_path = download_photo_to_out_item(session, dir_num, media_num)
-        results.append(
-            {
-                "dirNum": dir_num,
-                "mediaNum": media_num,
-                "path": str(out_path) if out_path else None,
-            }
-        )
-    return results
-
-
-def download_media_page(
-    session,
-):
-    raise RuntimeError("download_media_page() moved to DownloadMediaPageCommand; call that instead")
-
-
-def extract_gallery_records(assembled: bytes, out_dir: Optional[str] = None):
-    records = []
-    for ver, typ, payload in parse_artemis_records(assembled):
-        if len(payload) < 72:
-            continue
-        header = payload[:72]
-        mac = header[:17].decode("ascii", errors="ignore")
-        record_id = int.from_bytes(header[34:36], "little")
-        jpeg_len = int.from_bytes(header[36:38], "little")
-        jpeg = payload[72 : 72 + jpeg_len]
-        records.append((record_id, jpeg_len, ver, typ, mac, jpeg))
-
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
-        for record_id, jpeg_len, ver, typ, mac, jpeg in records:
-            if not jpeg.startswith(b"\xff\xd8\xff"):
-                continue
-            fname = f"thumb_{record_id}_type{typ}_ver{ver}_{mac.replace(':','')}.jpg"
-            path = os.path.join(out_dir, fname)
-            with open(path, "wb") as f:
-                f.write(jpeg)
-
-    return records
