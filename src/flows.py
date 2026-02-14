@@ -287,15 +287,12 @@ def send_full_json_flow(
 
 
 def send_photo_download_flow(
-    client: TrailCamClient,
-    token: int,
+    session: TrailCamSession,
     dir_num: int,
     media_num: int,
+    *,
+    dump_dir: str,
     file_type: int = 0,
-    listen_s: float = 45.0,
-    idle_break_s: float = 4.0,
-    dump_dir: str = "out/download",
-    debug: bool = False,
 ):
     """
     Request a single media file via cmdId=1285 and capture download payloads.
@@ -304,6 +301,12 @@ def send_photo_download_flow(
     - Uses app-like command shape: {"cmdId":1285,"downloadReqs":[...],"token":...}
     - Uses ARTEMIS type 7 (seen in trailcam_10).
     """
+    client = session.client
+    token = int(session.login_token_u32)
+    listen_s = float(session.defaults.download_listen_s)
+    idle_break_s = float(session.defaults.download_idle_s)
+    debug = bool(session.debug)
+
     art_typ = 7
     req = {
         "cmdId": 1285,
@@ -577,17 +580,7 @@ def download_photo_to_out_item(session: TrailCamSession, dir_num: int, media_num
     tmp_base = Path(temp_root) / "photo_dumps"
     tmp_base.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f"photo_{dir_num}_{media_num}_", dir=str(tmp_base)) as td:
-        res = send_photo_download_flow(
-            client,
-            token,
-            dir_num=dir_num,
-            media_num=media_num,
-            file_type=0,
-            listen_s=listen_s,
-            idle_break_s=idle_break_s,
-            dump_dir=td,
-            debug=debug,
-        )
+        res = send_photo_download_flow(session, dir_num, media_num, dump_dir=td, file_type=0)
         best = res.get("best_jpeg")
         if not best:
             return None
