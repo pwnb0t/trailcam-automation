@@ -36,15 +36,9 @@ Update docs to reflect current architecture:
   * Currently does BLE wake -> AP join -> UDP handshake -> login.
   * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
   * In this case, it should instead go back to BLE wake.
-* Add a .env or env.yml file to store the various settings of the client
-    * Add trailcams to env. Have "front" "back" aliases and then MAC in the env.
-    * I think I want most "default" options to be configurable from this env. The "single download" and others like that should still be script options.
-* Create a Config class to hold env or anything else. Ideally it would be immutable but probably would have to be after
-* Maybe remove SSID option and only use MAC address option. Should get SSID from MAC from the trailcam. Could still just do both in the env with SSID as a verification step?
 * /mnt/trailcam is hooked up.
     * Need to send files to /mnt/trailcam/staging then the final output to /mnt/trailcam/media
 * Need an orchestration script (trailcam_sync.py)
-    * Needs to have env.
     * Resumable state file (perhaps a manifest of items to download and what is downloaded)
 * File structure and naming/renaming
     * Download files to staging. Move files from staging to media and rename
