@@ -9,14 +9,14 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. Add orchestrator (`trailcam_sync.py`) to download all media and optionally delete/format the card.
+1. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
 
-2. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
-
-3. Docs and Cleanup
+2. Docs and Cleanup
 Update docs to reflect current architecture:
 - CLI/config parsing now lives in `src/config.py` (not `src/runner_inputs.py`).
 - Commands own behavior; flows should trend toward packet-level helpers.
+
+3. Add orchestrator (`trailcam_sync.py`) to download all media and optionally delete/format the card.
 
 
 
