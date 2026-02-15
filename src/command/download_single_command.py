@@ -23,19 +23,19 @@ class DownloadSingleCommand(Command):
             raise CommandError("session.client is required")
         if not isinstance(s.login_token_u32, int) or s.login_token_u32 <= 0:
             raise CommandError("session.login_token_u32 must be a positive int")
-        if s.target_media_num is None:
-            raise CommandError("session.target_media_num is required")
-        if s.target_dir_num is None:
-            raise CommandError("session.target_dir_num is required")
-        if int(s.client_cfg.page_item_cnt) >= 50:
-            raise CommandError("session.client_cfg.page_item_cnt must be < 50 (camera rejects >= 50)")
+        if s.cfg.media_num is None:
+            raise CommandError("session.cfg.media_num is required")
+        if s.cfg.dir_num is None:
+            raise CommandError("session.cfg.dir_num is required")
+        if int(s.cfg.client.page_item_cnt) >= 50:
+            raise CommandError("session.cfg.client.page_item_cnt must be < 50 (camera rejects >= 50)")
 
     def _find_entry(self) -> Optional[Dict[str, Any]]:
         s = self.session
-        want_dir = int(s.target_dir_num)
-        want_media = int(s.target_media_num)
-        max_pages = int(s.client_cfg.list_max_pages)
-        item_cnt = int(s.client_cfg.page_item_cnt)
+        want_dir = int(s.cfg.dir_num)
+        want_media = int(s.cfg.media_num)
+        max_pages = int(s.cfg.client.list_max_pages)
+        item_cnt = int(s.cfg.client.page_item_cnt)
 
         for page_no in range(0, max_pages):
             entries = fetch_media_list_page(s, page_no=page_no, item_cnt_per_page=item_cnt)
@@ -50,8 +50,8 @@ class DownloadSingleCommand(Command):
         entry = self._find_entry()
         if not entry:
             raise CommandError(
-                f"Media not found in list: dir={int(s.target_dir_num)} media={int(s.target_media_num)} "
-                f"(searched up to list_max_pages={int(s.client_cfg.list_max_pages)})"
+                f"Media not found in list: dir={int(s.cfg.dir_num)} media={int(s.cfg.media_num)} "
+                f"(searched up to list_max_pages={int(s.cfg.client.list_max_pages)})"
             )
 
         file_type = int(entry.get("fileType", 0))
@@ -63,9 +63,9 @@ class DownloadSingleCommand(Command):
             return {"kind": "photo", "dirNum": dir_num, "mediaNum": media_num, "path": str(out_path) if out_path else None}
 
         if file_type == 1:
-            out_mp4 = str(s.target_video_out or "").strip()
+            out_mp4 = str(s.cfg.video_out or "").strip()
             if not out_mp4:
-                out_mp4 = media_file_path(str(s.paths.media_out_dir), dir_num, media_num, file_type=1)
+                out_mp4 = media_file_path(str(s.cfg.paths.media_out_dir), dir_num, media_num, file_type=1)
             send_video_download_flow_item(s, dir_num, media_num, out_mp4_path=out_mp4)
             return {"kind": "video", "dirNum": dir_num, "mediaNum": media_num, "path": str(out_mp4)}
 

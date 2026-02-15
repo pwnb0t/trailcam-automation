@@ -35,7 +35,7 @@ async def main():
 
     if cfg.op == "list_media_page":
         page = ListMediaPageCommand(session).run()
-        print(f"Media entries (page {session.client_cfg.page_no}): {len(page)}")
+        print(f"Media entries (page {session.cfg.client.page_no}): {len(page)}")
         for e in page:
             print(
                 f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "

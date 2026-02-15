@@ -51,9 +51,9 @@ def send_photo_download_flow(
     """
     client = session.client
     token = int(session.login_token_u32)
-    listen_s = float(session.client_cfg.download_listen_s)
-    idle_break_s = float(session.client_cfg.download_idle_s)
-    debug = bool(session.debug)
+    listen_s = float(session.cfg.client.download_listen_s)
+    idle_break_s = float(session.cfg.client.download_idle_s)
+    debug = bool(session.cfg.debug)
 
     art_typ = 7
     req = {
@@ -314,10 +314,10 @@ def send_photo_download_flow(
 def download_photo_to_out_item(session: TrailCamSession, dir_num: int, media_num: int) -> Optional[Path]:
     """Download a photo (dir/media) and write it to the stable output layout.
 
-    Uses a temp dump directory under session.paths.tmp_dir and only keeps the final JPEG.
+    Uses a temp dump directory under session.cfg.paths.tmp_dir and only keeps the final JPEG.
     """
-    out_root = str(session.paths.media_out_dir)
-    temp_root = str(session.paths.tmp_dir)
+    out_root = str(session.cfg.paths.media_out_dir)
+    temp_root = str(session.cfg.paths.tmp_dir)
 
     out_path = _media_file_path(out_root, dir_num, media_num, file_type=0)
     tmp_base = Path(temp_root) / "photo_dumps"
@@ -333,9 +333,9 @@ def download_photo_to_out_item(session: TrailCamSession, dir_num: int, media_num
 
 def download_photo_to_out(session: TrailCamSession) -> Optional[Path]:
     """Download the session's target photo and write it to the stable output layout."""
-    if session.target_dir_num is None or session.target_media_num is None:
-        raise ValueError("session.target_dir_num and session.target_media_num are required")
-    return download_photo_to_out_item(session, int(session.target_dir_num), int(session.target_media_num))
+    if session.cfg.dir_num is None or session.cfg.media_num is None:
+        raise ValueError("session.cfg.dir_num and session.cfg.media_num are required")
+    return download_photo_to_out_item(session, int(session.cfg.dir_num), int(session.cfg.media_num))
 
 
 def _parse_artemis_v4_payload_header(payload: bytes) -> Optional[Dict[str, int]]:
@@ -376,16 +376,16 @@ def send_video_download_flow_item(
     client = session.client
     token = int(session.login_token_u32)
     file_type = 1
-    fps = int(session.client_cfg.video_fps)
-    listen_s = float(session.client_cfg.download_listen_s)
-    idle_break_s = float(session.client_cfg.download_idle_s)
-    debug = bool(session.debug)
+    fps = int(session.cfg.client.video_fps)
+    listen_s = float(session.cfg.client.download_listen_s)
+    idle_break_s = float(session.cfg.client.download_idle_s)
+    debug = bool(session.cfg.debug)
 
     if not out_mp4_path:
-        out_mp4_path = str(_media_file_path(str(session.paths.media_out_dir), dir_num, media_num, file_type=1))
+        out_mp4_path = str(_media_file_path(str(session.cfg.paths.media_out_dir), dir_num, media_num, file_type=1))
 
     # Avoid /tmp on small devices (often tmpfs) by default.
-    temp_root_p = Path(str(session.paths.tmp_dir))
+    temp_root_p = Path(str(session.cfg.paths.tmp_dir))
     temp_root_p.mkdir(parents=True, exist_ok=True)
 
     # Session number: app provides one; we generate a stable-ish u16.
@@ -572,13 +572,13 @@ def send_video_download_flow_item(
 
 def send_video_download_flow(session: TrailCamSession) -> Dict[str, Any]:
     """Download the session's target video and write it to the stable output layout."""
-    if session.target_dir_num is None or session.target_media_num is None:
-        raise ValueError("session.target_dir_num and session.target_media_num are required")
-    out_mp4 = str(session.target_video_out or "").strip() or None
+    if session.cfg.dir_num is None or session.cfg.media_num is None:
+        raise ValueError("session.cfg.dir_num and session.cfg.media_num are required")
+    out_mp4 = str(session.cfg.video_out or "").strip() or None
     return send_video_download_flow_item(
         session,
-        int(session.target_dir_num),
-        int(session.target_media_num),
+        int(session.cfg.dir_num),
+        int(session.cfg.media_num),
         out_mp4_path=out_mp4,
     )
 
@@ -684,11 +684,11 @@ def fetch_media_list_page(
 ) -> List[Dict[str, Any]]:
     client = session.client
     token = int(session.login_token_u32)
-    debug = bool(session.debug)
+    debug = bool(session.cfg.debug)
     if page_no is None:
-        page_no = int(session.client_cfg.page_no)
+        page_no = int(session.cfg.client.page_no)
     if item_cnt_per_page is None:
-        item_cnt_per_page = int(session.client_cfg.page_item_cnt)
+        item_cnt_per_page = int(session.cfg.client.page_item_cnt)
 
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": item_cnt_per_page, "pageNo": page_no, "token": token}

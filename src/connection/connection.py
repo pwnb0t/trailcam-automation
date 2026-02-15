@@ -189,17 +189,11 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
             raise RuntimeError("Login token not found")
         client.token_int = token
         return TrailCamSession(
-            camera=camera,
-            client_cfg=cfg.client,
-            paths=cfg.paths,
+            cfg=cfg,
             client=client,
             login_token_u32=token,
             wifi_ssid=ssid_expected,
             wifi_pwd=wifi_pwd,
-            debug=cfg.debug,
-            target_dir_num=cfg.dir_num,
-            target_media_num=cfg.media_num,
-            target_video_out=str(cfg.video_out or ""),
         )
     except Exception:
         client.close()

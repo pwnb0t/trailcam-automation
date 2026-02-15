@@ -23,18 +23,18 @@ class DownloadMediaPageCommand(Command):
             raise CommandError("session.client is required")
         if not isinstance(s.login_token_u32, int) or s.login_token_u32 <= 0:
             raise CommandError("session.login_token_u32 must be a positive int")
-        if not s.paths.media_out_dir:
-            raise CommandError("session.paths.media_out_dir is required")
-        if not s.paths.tmp_dir:
-            raise CommandError("session.paths.tmp_dir is required")
-        if int(s.client_cfg.page_item_cnt) >= 50:
-            raise CommandError("session.client_cfg.page_item_cnt must be < 50 (camera rejects >= 50)")
+        if not s.cfg.paths.media_out_dir:
+            raise CommandError("session.cfg.paths.media_out_dir is required")
+        if not s.cfg.paths.tmp_dir:
+            raise CommandError("session.cfg.paths.tmp_dir is required")
+        if int(s.cfg.client.page_item_cnt) >= 50:
+            raise CommandError("session.cfg.client.page_item_cnt must be < 50 (camera rejects >= 50)")
 
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
         s = self.session
-        page_no = int(s.client_cfg.page_no)
-        out_root = str(s.paths.media_out_dir)
+        page_no = int(s.cfg.client.page_no)
+        out_root = str(s.cfg.paths.media_out_dir)
         entries = fetch_media_list_page(s)
         if not entries:
             print("No media entries found on requested page.")

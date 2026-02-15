@@ -18,8 +18,8 @@ class ListMediaPageCommand(Command):
             raise CommandError("session.client is required")
         if not isinstance(s.login_token_u32, int) or s.login_token_u32 <= 0:
             raise CommandError("session.login_token_u32 must be a positive int")
-        if int(s.client_cfg.page_item_cnt) >= 50:
-            raise CommandError("session.client_cfg.page_item_cnt must be < 50 (camera rejects >= 50)")
+        if int(s.cfg.client.page_item_cnt) >= 50:
+            raise CommandError("session.cfg.client.page_item_cnt must be < 50 (camera rejects >= 50)")
 
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
