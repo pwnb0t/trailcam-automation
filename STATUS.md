@@ -12,7 +12,6 @@
 * There are still some naming oddities.
   * trailcam_client.py is probably a bad name particularly because TrailCamClient is in client.py
     * Considered trailcam_runner.py or something to that effect. Might need naming suggestions.
-  * There are a lot of Configs and that don't exactly lineup like I thought they would.
 * Need an orchestration script (trailcam_sync.py)
   * Resumable state file (perhaps a manifest of items to download and what is downloaded)
 
