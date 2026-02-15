@@ -9,12 +9,49 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-* There are still some naming oddities.
-* client_runner.py is the CLI entrypoint for running one-off client operations against a camera.
-    * Considered trailcam_runner.py or something to that effect. Might need naming suggestions.
 * Need an orchestration script (trailcam_sync.py)
   * Resumable state file (perhaps a manifest of items to download and what is downloaded)
 
+* trailcam_sync.py architecture; Option 1
+  * Utilizes client_runner.py
+  * Load config
+  * Create/resume state file (sync_state.yaml or sync_state.json)
+    * Determine which is better for storing the state of the app
+  * State: download
+    * If session.staging_manifest is None
+      * Build a session.staging_manifest of items currently in staging dir (cfg.paths.media_out_dir)
+    * If session.trailcam_manifest is None
+      * Build a session.trailcam_manifest of items on the trailcam
+    * Determine which items are missing from the staging dir and download them from the trailcam using client_runner.py
+    * client_runner.py should download pages of items and skip items that are already downloaded itself
+    * set state=verify and clear session.staging_manifest and session.trailcam_manifest
+  * State: verify
+    * If session.staging_manifest is None
+      * Build a session.staging_manifest of items currently in staging dir (cfg.paths.media_out_dir)
+    * If session.trailcam_manifest is None
+      * Build a session.trailcam_manifest of items on the trailcam
+    * If there are any non-downloaded items (items on trailcam_manifest that are not on staging_manifest)
+      * move back to state=download so they will get copied.
+    * If all items are downloaded, then set state=clear and continue
+  * State: clear
+    * If session.trailcam_manifest is None, error out
+      * This would be an unrecoverable state without human intervention -- but I might need to see how it gets in this state to diagnose
+    * I have not implemented delete photo or format disk, so this is not ready. But I'm going to assume I will do the format because it is much faster
+    * For now, print "TODO - format cam: <alias>"
+    * move to state=organize
+  * State: organize
+    * Ensure session.staging_manifest is not None, otherwise error out
+    * Moves items from staging dir (cfg.paths.media_out_dir, /mnt/trailcam/staging) to final dir (/mnt/trailcam/media/YYYY-WW/<alias>_YYYYMMDD_HHMMSS_<dirNum>-<mediaNum>.<jpg|mp4>)
+      * e.g. /mnt/trailcam/staging/back/102/media940.jpg -> /mnt/trailcam/media/2026-01/back_20260101_144523_102-940.jpg
+    * Rather than overwriting, we probably ought to make a `/mnt/trailcam/dupes` folder and dump anything in there in some sort of organized fashion
+      * /mnt/trailcam/dupes/<todays-run-datetime>/102/media940.jpg
+
+# sync_state arch
+  cameras:
+    <alias>:
+      status: download, verify, clear, organize
+    back
+    front
 
 
 
