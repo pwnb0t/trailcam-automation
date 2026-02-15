@@ -9,7 +9,7 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
+1. Remove remaining legacy/historical protocol artifacts from runtime code.
 
 2. Docs and Cleanup
 Update docs to reflect current architecture:

@@ -4,7 +4,8 @@ from typing import Dict, List, Optional
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-from src.constants import AES_CMD_IV, AES_CMD_KEY, CONNECT_D0_PACKETS
+from src.constants import AES_CMD_IV, AES_CMD_KEY
+from tools.historical_d0_packets import CONNECT_D0_PACKETS
 from src.protocol import decrypt_cmd_b64, parse_artemis_records
 
 

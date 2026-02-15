@@ -19,7 +19,6 @@ from src.protocol import (
     parse_artemis_records_strict,
     unpack_f1,
 )
-from src.seed import get_seed_thumbnail_reqs
 
 
 def _media_dir_path(out_root: str, dir_num: int) -> Path:
@@ -693,9 +692,6 @@ def fetch_media_list_page(
 
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": item_cnt_per_page, "pageNo": page_no, "token": token}
-    thumb_reqs = get_seed_thumbnail_reqs()
-    thumb_cmd = {"cmdId": 772, "thumbnailReqs": thumb_reqs, "token": token}
-
     entries: List[Dict[str, Any]] = []
     seen_keys: set[tuple[int, int, int]] = set()
     last_media_list_error: Optional[str] = None
@@ -724,9 +720,6 @@ def fetch_media_list_page(
             if debug:
                 print(f"TX JSON: media list page={page_no} count={item_cnt_per_page} (attempt {attempt}/{retries})")
             client.send_cmd_json(media_list, art_ver=2, art_typ=4)
-            if debug:
-                print(f"TX JSON: thumbs (attempt {attempt}/{retries})")
-            client.send_cmd_json(thumb_cmd, art_ver=2, art_typ=5)
 
             deadline = time.time() + timeout_s
             while time.time() < deadline:
