@@ -6,12 +6,11 @@ cameras:
     ble_address: "C6:1E:0D:E0:0C:FB"
     ssid: "TrailCam_5DBD"
 
-# Defaults are used unless overridden on the CLI.
-defaults:
+# Client defaults are used unless overridden on the CLI.
+client:
   wifi_ifname: "wlan0"
   udp_local_port: 16734
 
-  page_no: 0
   page_item_cnt: 48
   list_max_pages: 200
 

@@ -115,7 +115,7 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
 
     nmcli_rescan()
     ssids_now = nmcli_list_ssids()
-    already_connected = ssid_expected in ssids_now and wifi_has_camera_ip(cfg.defaults.wifi_ifname)
+    already_connected = ssid_expected in ssids_now and wifi_has_camera_ip(cfg.client.wifi_ifname)
 
     wifi_pwd: Optional[str] = None
     if not already_connected:
@@ -140,19 +140,19 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
         else:
             raise RuntimeError("SSID not visible after 60s")
 
-        if not nmcli_connect(ssid, wifi_pwd, cfg.defaults.wifi_ifname):
+        if not nmcli_connect(ssid, wifi_pwd, cfg.client.wifi_ifname):
             raise RuntimeError("nmcli connect failed")
 
     for _ in range(30):
-        if wifi_has_camera_ip(cfg.defaults.wifi_ifname):
+        if wifi_has_camera_ip(cfg.client.wifi_ifname):
             break
         await asyncio.sleep(0.2)
-    if not wifi_has_camera_ip(cfg.defaults.wifi_ifname):
+    if not wifi_has_camera_ip(cfg.client.wifi_ifname):
         raise RuntimeError("Connected but did not get 192.168.43.x address")
 
     await asyncio.sleep(1.0)
 
-    client = TrailCamClient(local_port=cfg.defaults.udp_local_port)
+    client = TrailCamClient(local_port=cfg.client.udp_local_port)
     try:
         client.send_beacons(count=4)
         client.learn_camera_port()
@@ -164,7 +164,7 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
         client.token_int = token
         return TrailCamSession(
             camera=camera,
-            defaults=cfg.defaults,
+            client_cfg=cfg.client,
             paths=cfg.paths,
             client=client,
             login_token_u32=token,

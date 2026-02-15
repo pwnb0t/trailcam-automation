@@ -18,10 +18,10 @@ class ListMediaAllCommand(Command):
             raise CommandError("session.client is required")
         if not isinstance(s.login_token_u32, int) or s.login_token_u32 <= 0:
             raise CommandError("session.login_token_u32 must be a positive int")
-        if int(s.defaults.page_item_cnt) >= 50:
-            raise CommandError("session.defaults.page_item_cnt must be < 50 (camera rejects >= 50)")
-        if int(s.defaults.list_max_pages) <= 0:
-            raise CommandError("session.defaults.list_max_pages must be > 0")
+        if int(s.client_cfg.page_item_cnt) >= 50:
+            raise CommandError("session.client_cfg.page_item_cnt must be < 50 (camera rejects >= 50)")
+        if int(s.client_cfg.list_max_pages) <= 0:
+            raise CommandError("session.client_cfg.list_max_pages must be > 0")
 
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
@@ -33,8 +33,8 @@ class ListMediaAllCommand(Command):
         repeat_pages = 0
         no_new_pages = 0
 
-        item_cnt_per_page = int(session.defaults.page_item_cnt)
-        max_pages = int(session.defaults.list_max_pages)
+        item_cnt_per_page = int(session.client_cfg.page_item_cnt)
+        max_pages = int(session.client_cfg.list_max_pages)
         debug = bool(session.debug)
 
         for page_no in range(0, max_pages):

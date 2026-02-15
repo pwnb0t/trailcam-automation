@@ -12,12 +12,15 @@
 1. Config
 Remove --page-no from config.yaml
 
-Change --download-photo and --download-video to be --download-single MEDIA_NUM (remove --media-num)
---dir-num should default to 100
+Done:
+- `defaults.page_no` removed from `config.example.yaml` and disallowed in config parsing.
+- `--download-single MEDIA_NUM` added; removed the `--download-photo/--download-video/--media-num` split.
+- `--dir-num` now defaults to 100.
 
-Check how --list-max-pages works. Does it force listing 200 or does it know when to stop?
-
-rename the "defaults" section
+Remaining:
+- Check how `--list-max-pages` behaves in practice and document it (it is a cap, and listing can stop early).
+Done:
+- Config section renamed from `defaults:` to `client:` (see `config.example.yaml`).
 
 2. Use alias (front/back, or whatever is defined in config.yaml) to connect to camera instead of SSID or MAC.
 

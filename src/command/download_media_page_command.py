@@ -27,13 +27,13 @@ class DownloadMediaPageCommand(Command):
             raise CommandError("session.paths.media_out_dir is required")
         if not s.paths.tmp_dir:
             raise CommandError("session.paths.tmp_dir is required")
-        if int(s.defaults.page_item_cnt) >= 50:
-            raise CommandError("session.defaults.page_item_cnt must be < 50 (camera rejects >= 50)")
+        if int(s.client_cfg.page_item_cnt) >= 50:
+            raise CommandError("session.client_cfg.page_item_cnt must be < 50 (camera rejects >= 50)")
 
     def run(self) -> List[Dict[str, Any]]:
         self.validate()
         s = self.session
-        page_no = int(s.defaults.page_no)
+        page_no = int(s.client_cfg.page_no)
         out_root = str(s.paths.media_out_dir)
         entries = fetch_media_list_page(s)
         if not entries:

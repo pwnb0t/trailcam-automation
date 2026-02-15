@@ -14,6 +14,9 @@ DEFAULT_DOWNLOAD_LISTEN_S = 45.0
 DEFAULT_DOWNLOAD_IDLE_S = 4.0
 DEFAULT_VIDEO_FPS = 30
 
+# Default camera media directory (DCIM folder number)
+DEFAULT_DIR_NUM = 100
+
 # Camera constraint: returns an error if itemCntPerPage >= 50.
 MAX_PAGE_ITEM_CNT_EXCLUSIVE = 50
 

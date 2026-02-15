@@ -3,8 +3,7 @@ import asyncio
 
 from src.connection.connection import connect_and_login
 from src.command.download_media_page_command import DownloadMediaPageCommand
-from src.command.download_photo_command import DownloadPhotoCommand
-from src.command.download_video_command import DownloadVideoCommand
+from src.command.download_single_command import DownloadSingleCommand
 from src.command.list_media_all_command import ListMediaAllCommand
 from src.command.list_media_page_command import ListMediaPageCommand
 from src.config import parse_config_and_args
@@ -19,14 +18,9 @@ async def main():
     if cfg.op == "login_only":
         return
 
-    if cfg.op == "download_photo":
-        r = DownloadPhotoCommand(session).run()
-        print(f"Wrote photo: {r.get('path') or 'none'}")
-        return
-
-    if cfg.op == "download_video":
-        r = DownloadVideoCommand(session).run()
-        print(f"Wrote video: {r.get('path') or 'none'}")
+    if cfg.op == "download_single":
+        r = DownloadSingleCommand(session).run()
+        print(f"Wrote {r.get('kind')}: {r.get('path') or 'none'}")
         return
 
     if cfg.op == "download_page":
@@ -41,7 +35,7 @@ async def main():
 
     if cfg.op == "list_media_page":
         page = ListMediaPageCommand(session).run()
-        print(f"Media entries (page {session.defaults.page_no}): {len(page)}")
+        print(f"Media entries (page {session.client_cfg.page_no}): {len(page)}")
         for e in page:
             print(
                 f"  dir={e.get('dirNum')} media={e.get('mediaNum')} fileType={e.get('fileType')} "

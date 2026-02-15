@@ -17,6 +17,7 @@ from src.constants import (
     DEFAULT_DOWNLOAD_LISTEN_S,
     DEFAULT_DOWNLOAD_IDLE_S,
     DEFAULT_VIDEO_FPS,
+    DEFAULT_DIR_NUM,
     MAX_PAGE_ITEM_CNT_EXCLUSIVE,
 )
 
@@ -39,7 +40,7 @@ def _must_float(v: Any, field: str) -> float:
 class AppConfig:
     version: int
     cameras: Dict[str, CameraConfig]
-    defaults: DefaultsConfig
+    client: ClientConfig
     paths: PathsConfig
 
     def get_camera(self, alias: str) -> CameraConfig:
@@ -57,7 +58,7 @@ class CameraConfig:
 
 
 @dataclass(frozen=True)
-class DefaultsConfig:
+class ClientConfig:
     wifi_ifname: str = WIFI_IFNAME
     udp_local_port: int = LOCAL_PORT
 
@@ -85,13 +86,13 @@ class RunnerConfig:
     """Resolved config for a single run.
 
     This is derived from:
-    - constants defaults (via DefaultsConfig/PathsConfig dataclass defaults)
+    - constants defaults (via ClientConfig/PathsConfig dataclass defaults)
     - config.yaml overrides (AppConfig)
     - CLI overrides
     """
 
     camera: CameraConfig
-    defaults: DefaultsConfig
+    client: ClientConfig
     paths: PathsConfig
 
     op: str
@@ -113,7 +114,7 @@ def load_config(path: str | Path) -> AppConfig:
         return AppConfig(
             version=1,
             cameras={"default": cam},
-            defaults=DefaultsConfig(),
+            client=ClientConfig(),
             paths=PathsConfig(),
         )
 
@@ -141,20 +142,24 @@ def load_config(path: str | Path) -> AppConfig:
             raise ValueError(f"cameras.{alias}.ssid is required")
         cams[str(alias)] = CameraConfig(alias=str(alias), ble_address=ble, ssid=ssid)
 
-    defaults_raw = raw.get("defaults") or {}
-    if defaults_raw and not isinstance(defaults_raw, dict):
-        raise ValueError("defaults must be a mapping")
-    d = DefaultsConfig(
-        wifi_ifname=str(defaults_raw.get("wifi_ifname", WIFI_IFNAME)),
-        udp_local_port=_must_int(defaults_raw.get("udp_local_port", LOCAL_PORT), "defaults.udp_local_port"),
-        page_no=_must_int(defaults_raw.get("page_no", DEFAULT_PAGE_NO), "defaults.page_no"),
-        page_item_cnt=_must_int(defaults_raw.get("page_item_cnt", DEFAULT_PAGE_ITEM_CNT), "defaults.page_item_cnt"),
-        list_max_pages=_must_int(defaults_raw.get("list_max_pages", DEFAULT_LIST_MAX_PAGES), "defaults.list_max_pages"),
+    if "defaults" in raw and "client" in raw:
+        raise ValueError("Config must use only one of: 'client' (preferred) or legacy 'defaults'")
+    client_raw = raw.get("client", raw.get("defaults")) or {}
+    if client_raw and not isinstance(client_raw, dict):
+        raise ValueError("client must be a mapping")
+    if "page_no" in client_raw:
+        raise ValueError("client.page_no is CLI-only; remove it from config.yaml")
+    c = ClientConfig(
+        wifi_ifname=str(client_raw.get("wifi_ifname", WIFI_IFNAME)),
+        udp_local_port=_must_int(client_raw.get("udp_local_port", LOCAL_PORT), "client.udp_local_port"),
+        page_no=DEFAULT_PAGE_NO,
+        page_item_cnt=_must_int(client_raw.get("page_item_cnt", DEFAULT_PAGE_ITEM_CNT), "client.page_item_cnt"),
+        list_max_pages=_must_int(client_raw.get("list_max_pages", DEFAULT_LIST_MAX_PAGES), "client.list_max_pages"),
         download_listen_s=_must_float(
-            defaults_raw.get("download_listen_s", DEFAULT_DOWNLOAD_LISTEN_S), "defaults.download_listen_s"
+            client_raw.get("download_listen_s", DEFAULT_DOWNLOAD_LISTEN_S), "client.download_listen_s"
         ),
-        download_idle_s=_must_float(defaults_raw.get("download_idle_s", DEFAULT_DOWNLOAD_IDLE_S), "defaults.download_idle_s"),
-        video_fps=_must_int(defaults_raw.get("video_fps", DEFAULT_VIDEO_FPS), "defaults.video_fps"),
+        download_idle_s=_must_float(client_raw.get("download_idle_s", DEFAULT_DOWNLOAD_IDLE_S), "client.download_idle_s"),
+        video_fps=_must_int(client_raw.get("video_fps", DEFAULT_VIDEO_FPS), "client.video_fps"),
     )
 
     paths_raw = raw.get("paths") or {}
@@ -167,7 +172,7 @@ def load_config(path: str | Path) -> AppConfig:
         final_media_dir=(str(paths_raw["final_media_dir"]) if "final_media_dir" in paths_raw else None),
     )
 
-    return AppConfig(version=ver, cameras=cams, defaults=d, paths=paths)
+    return AppConfig(version=ver, cameras=cams, client=c, paths=paths)
 
 
 def _default_media_out_dir() -> str:
@@ -199,7 +204,7 @@ def _build_pre_parser() -> argparse.ArgumentParser:
 
 def _build_parser(
     *,
-    defaults: DefaultsConfig,
+    client_cfg: ClientConfig,
     paths: PathsConfig,
     camera: Optional[CameraConfig],
     config_path: Optional[Path],
@@ -230,8 +235,13 @@ def _build_parser(
 
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--login-only", action="store_true", help="Perform JSON login only and exit")
-    action.add_argument("--download-photo", action="store_true", help="Download one photo (requires --dir-num/--media-num)")
-    action.add_argument("--download-video", action="store_true", help="Download one video (requires --dir-num/--media-num)")
+    action.add_argument(
+        "--download-single",
+        type=int,
+        default=None,
+        metavar="MEDIA_NUM",
+        help="Download one media item by media number (uses media list to pick photo vs video)",
+    )
     action.add_argument("--download-page", action="store_true", help="Download all media items in one media-list page")
     action.add_argument("--list-media-page", action="store_true", help="List one media-list page")
     action.add_argument("--list-media-all", action="store_true", help="List all pages until stop condition")
@@ -239,19 +249,19 @@ def _build_parser(
     parser.add_argument(
         "--list-max-pages",
         type=int,
-        default=int(defaults.list_max_pages),
+        default=int(client_cfg.list_max_pages),
         help="Maximum pages to request when using --list-media-all (default: %(default)s)",
     )
     parser.add_argument(
         "--page-no",
         type=int,
-        default=int(defaults.page_no),
+        default=int(client_cfg.page_no),
         help="Media list page number for --download-page/--list-media-page (default: %(default)s)",
     )
     parser.add_argument(
         "--page-item-cnt",
         type=int,
-        default=int(defaults.page_item_cnt),
+        default=int(client_cfg.page_item_cnt),
         help="Items per media-list page request (default: %(default)s)",
     )
 
@@ -262,9 +272,8 @@ def _build_parser(
     )
     parser.add_argument("--tmp-dir", default=str(paths.tmp_dir), help="Temp directory root (default: %(default)s)")
 
-    parser.add_argument("--dir-num", type=int, default=None, help="Media directory number (e.g. 102)")
-    parser.add_argument("--media-num", type=int, default=None, help="Media number (e.g. 940)")
-    parser.add_argument("--video-out", default="", help="Explicit output MP4 path for --download-video")
+    parser.add_argument("--dir-num", type=int, default=DEFAULT_DIR_NUM, help="Media directory number (default: %(default)s)")
+    parser.add_argument("--video-out", default="", help="Explicit output MP4 path for --download-single (when item is a video)")
 
     return parser
 
@@ -304,15 +313,11 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
     elif len(app_cfg.cameras) == 1:
         camera = next(iter(app_cfg.cameras.values()))
 
-    parser = _build_parser(defaults=app_cfg.defaults, paths=paths, camera=camera, config_path=cfg_path)
+    parser = _build_parser(client_cfg=app_cfg.client, paths=paths, camera=camera, config_path=cfg_path)
     args = parser.parse_args(argv)
 
-    if (args.dir_num is not None or args.media_num is not None) and not (args.download_photo or args.download_video):
-        raise SystemExit("--dir-num/--media-num are only valid with --download-photo or --download-video")
-    if args.download_photo and (args.dir_num is None or args.media_num is None):
-        raise SystemExit("--download-photo requires --dir-num and --media-num")
-    if args.download_video and (args.dir_num is None or args.media_num is None):
-        raise SystemExit("--download-video requires --dir-num and --media-num")
+    if args.download_single is not None and args.download_single <= 0:
+        raise SystemExit("--download-single MEDIA_NUM must be a positive integer")
 
     page_item_cnt = int(args.page_item_cnt)
     if (args.download_page or args.list_media_page or args.list_media_all) and page_item_cnt >= MAX_PAGE_ITEM_CNT_EXCLUSIVE:
@@ -324,18 +329,21 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
     op = ""
     for name in (
         "login_only",
-        "download_photo",
-        "download_video",
+        "download_single",
         "download_page",
         "list_media_page",
         "list_media_all",
     ):
-        if getattr(args, name):
+        v = getattr(args, name)
+        if isinstance(v, bool) and v:
+            op = name
+            break
+        if name == "download_single" and v is not None:
             op = name
             break
     if not op:
         raise SystemExit(
-            "Choose an action: --login-only, --download-photo, --download-video, --download-page, "
+            "Choose an action: --login-only, --download-single, --download-page, "
             "--list-media-page, --list-media-all"
         )
 
@@ -343,16 +351,16 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
     cam_alias_final = str(args.camera or (camera.alias if camera else "cli"))
     cam = CameraConfig(alias=cam_alias_final, ble_address=str(args.ble_address), ssid=str(args.ssid).strip())
 
-    # Config-only: values are taken from app_cfg.defaults (constants -> yaml). No CLI flags.
-    defaults = DefaultsConfig(
-        wifi_ifname=str(app_cfg.defaults.wifi_ifname),
-        udp_local_port=int(app_cfg.defaults.udp_local_port),
+    # Config-only: values are taken from app_cfg.client (constants -> yaml). No CLI flags.
+    client_cfg = ClientConfig(
+        wifi_ifname=str(app_cfg.client.wifi_ifname),
+        udp_local_port=int(app_cfg.client.udp_local_port),
         page_no=int(args.page_no),
         page_item_cnt=int(page_item_cnt),
         list_max_pages=int(args.list_max_pages),
-        download_listen_s=float(app_cfg.defaults.download_listen_s),
-        download_idle_s=float(app_cfg.defaults.download_idle_s),
-        video_fps=int(app_cfg.defaults.video_fps),
+        download_listen_s=float(app_cfg.client.download_listen_s),
+        download_idle_s=float(app_cfg.client.download_idle_s),
+        video_fps=int(app_cfg.client.video_fps),
     )
 
     # Paths: allow CLI override of media/tmp dirs.
@@ -364,11 +372,11 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
 
     return RunnerConfig(
         camera=cam,
-        defaults=defaults,
+        client=client_cfg,
         paths=run_paths,
         op=op,
-        dir_num=(int(args.dir_num) if args.dir_num is not None else None),
-        media_num=(int(args.media_num) if args.media_num is not None else None),
+        dir_num=int(args.dir_num),
+        media_num=(int(args.download_single) if args.download_single is not None else None),
         video_out=str(args.video_out or ""),
         debug=bool(args.debug),
     )

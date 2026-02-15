@@ -52,8 +52,8 @@ def send_photo_download_flow(
     """
     client = session.client
     token = int(session.login_token_u32)
-    listen_s = float(session.defaults.download_listen_s)
-    idle_break_s = float(session.defaults.download_idle_s)
+    listen_s = float(session.client_cfg.download_listen_s)
+    idle_break_s = float(session.client_cfg.download_idle_s)
     debug = bool(session.debug)
 
     art_typ = 7
@@ -377,9 +377,9 @@ def send_video_download_flow_item(
     client = session.client
     token = int(session.login_token_u32)
     file_type = 1
-    fps = int(session.defaults.video_fps)
-    listen_s = float(session.defaults.download_listen_s)
-    idle_break_s = float(session.defaults.download_idle_s)
+    fps = int(session.client_cfg.video_fps)
+    listen_s = float(session.client_cfg.download_listen_s)
+    idle_break_s = float(session.client_cfg.download_idle_s)
     debug = bool(session.debug)
 
     if not out_mp4_path:
@@ -687,9 +687,9 @@ def fetch_media_list_page(
     token = int(session.login_token_u32)
     debug = bool(session.debug)
     if page_no is None:
-        page_no = int(session.defaults.page_no)
+        page_no = int(session.client_cfg.page_no)
     if item_cnt_per_page is None:
-        item_cnt_per_page = int(session.defaults.page_item_cnt)
+        item_cnt_per_page = int(session.client_cfg.page_item_cnt)
 
     dev_info = {"cmdId": 512, "token": token}
     media_list = {"cmdId": 768, "itemCntPerPage": item_cnt_per_page, "pageNo": page_no, "token": token}

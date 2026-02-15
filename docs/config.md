@@ -11,7 +11,8 @@ See `config.example.yaml` (you can name your real file `config.yaml` or `config.
 - Define one or more cameras under `cameras:` with:
   - `ble_address`: BLE MAC address used for wake/credentials
   - `ssid`: expected camera AP SSID (used as a verification step)
-- Put default knobs under `defaults:` (wifi interface, UDP bind port, page sizes, timeouts).
+- Put default knobs under `client:` (wifi interface, UDP bind port, page sizes, timeouts).
+  - Note: `client.page_no` is intentionally CLI-only; do not put it in config.yaml.
 - Put output paths under `paths:`.
   - On `piiter`, `/mnt/trailcam/staging` is the intended `media_out_dir`.
 
