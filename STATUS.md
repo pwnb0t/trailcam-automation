@@ -9,24 +9,12 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. Config
-Remove --page-no from config.yaml
+1. Use alias (front/back, or whatever is defined in config.yaml) to connect to camera instead of SSID or MAC.
+Remove --ssid and --ble-address CLI opts (should not be config.yaml opts).
 
-Done:
-- `defaults.page_no` removed from `config.example.yaml` and disallowed in config parsing.
-- `--download-single MEDIA_NUM` added; removed the `--download-photo/--download-video/--media-num` split.
-- `--dir-num` now defaults to 100.
+2. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
 
-Remaining:
-- Check how `--list-max-pages` behaves in practice and document it (it is a cap, and listing can stop early).
-Done:
-- Config section renamed from `defaults:` to `client:` (see `config.example.yaml`).
-
-2. Use alias (front/back, or whatever is defined in config.yaml) to connect to camera instead of SSID or MAC.
-
-3. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
-
-4. Docs and Cleanup
+3. Docs and Cleanup
 Update docs to reflect current architecture:
 - CLI/config parsing now lives in `src/config.py` (not `src/runner_inputs.py`).
 - Commands own behavior; flows should trend toward packet-level helpers.
