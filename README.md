@@ -22,4 +22,6 @@ I've probably left some passwords and stuff in here so uhh, don't come to my hou
 -----
 
 # Quick test run -- downloads latest 2 files off trailcam
-python3 trailcam_client.py --ssid TrailCam_5DBD --download-page --page-no 0 --page-item-cnt 2
+1. Copy `config.example.yaml` to `config.yaml` and set your camera alias/values.
+2. Run:
+   `python3 trailcam_client.py --camera back --download-page --page-no 0 --page-item-cnt 2`

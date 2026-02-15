@@ -24,6 +24,32 @@ def nmcli_list_ssids() -> List[str]:
     return [line.strip() for line in p.stdout.splitlines() if line.strip()]
 
 
+def nmcli_active_ssid(ifname: str) -> Optional[str]:
+    # Example lines:
+    # wlan0:yes:TrailCam_5DBD
+    # wlan0:no:OtherNet
+    p = subprocess.run(
+        ["sudo", "nmcli", "-t", "-f", "DEVICE,ACTIVE,SSID", "dev", "wifi"],
+        text=True,
+        capture_output=True,
+    )
+    if p.returncode != 0:
+        return None
+    for line in p.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(":", 2)
+        if len(parts) != 3:
+            continue
+        dev, active, ssid = parts
+        if dev.strip() != ifname:
+            continue
+        if active.strip().lower() == "yes":
+            return ssid.strip() or None
+    return None
+
+
 def nmcli_connect(ssid: str, pwd: str, ifname: str) -> bool:
     # remove stale profile first
     subprocess.run(["sudo", "nmcli", "con", "delete", "id", ssid], text=True, capture_output=True)
@@ -114,8 +140,8 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
     ssid_expected = camera.ssid
 
     nmcli_rescan()
-    ssids_now = nmcli_list_ssids()
-    already_connected = ssid_expected in ssids_now and wifi_has_camera_ip(cfg.client.wifi_ifname)
+    active_ssid = nmcli_active_ssid(cfg.client.wifi_ifname)
+    already_connected = (active_ssid == ssid_expected) and wifi_has_camera_ip(cfg.client.wifi_ifname)
 
     wifi_pwd: Optional[str] = None
     if not already_connected:

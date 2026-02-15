@@ -9,8 +9,7 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. Use alias (front/back, or whatever is defined in config.yaml) to connect to camera instead of SSID or MAC.
-Remove --ssid and --ble-address CLI opts (should not be config.yaml opts).
+1. Add orchestrator (`trailcam_sync.py`) to download all media and optionally delete/format the card.
 
 2. Do CONNECT_D0_PACKETS and REFRESH_D0_PACKETS still make sense in constants? Do we still need this as constants? Are they not reverse engineered to be determined?
 
@@ -69,8 +68,10 @@ Update docs to reflect current architecture:
 
 # quick testing note
 
+Requires `config.yaml` (see `config.example.yaml`) with a `cameras:` entry for the alias you pass.
+
 ran:
-python3 trailcam_client.py --ssid TrailCam_5DBD --list-media-all
+python3 trailcam_client.py --camera back --list-media-all
 
 appeared to work and get all contents after quite some time (10+ minutes?)
 more output than the terminal buffer stored, but here's the tail end:

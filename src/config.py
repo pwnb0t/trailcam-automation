@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -8,7 +9,6 @@ from typing import Any, Dict, Optional
 import yaml
 
 from src.constants import (
-    DEFAULT_BLE_ADDRESS,
     WIFI_IFNAME,
     LOCAL_PORT,
     DEFAULT_PAGE_NO,
@@ -103,20 +103,10 @@ class RunnerConfig:
 
 
 def load_config(path: str | Path) -> AppConfig:
-    """Load config YAML from disk.
-
-    If the file does not exist, returns a default config with a single implicit camera.
-    """
+    """Load config YAML from disk."""
     p = Path(path)
     if not p.exists():
-        # Backward-compatible defaults: one unnamed camera.
-        cam = CameraConfig(alias="default", ble_address=DEFAULT_BLE_ADDRESS, ssid="")
-        return AppConfig(
-            version=1,
-            cameras={"default": cam},
-            client=ClientConfig(),
-            paths=PathsConfig(),
-        )
+        raise FileNotFoundError(f"Config file not found: {p}")
 
     raw = yaml.safe_load(p.read_text("utf-8")) or {}
     if not isinstance(raw, dict):
@@ -202,11 +192,44 @@ def _build_pre_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _build_help_only_parser() -> argparse.ArgumentParser:
+    # This is used when the user requests --help but no config.yaml is present.
+    # It deliberately omits dynamic defaults and camera choices.
+    parser = argparse.ArgumentParser(description="TrailCam client runner.")
+    parser.add_argument("--config", default=None, help="Path to config.yaml/config.yml (default: auto-detect)")
+    parser.add_argument("--camera", default=None, help="Camera alias from config.yaml")
+    parser.add_argument("--debug", action="store_true", help="Enable verbose logging of incoming packets")
+
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--login-only", action="store_true", help="Perform JSON login only and exit")
+    action.add_argument(
+        "--download-single",
+        type=int,
+        default=None,
+        metavar="MEDIA_NUM",
+        help="Download one media item by media number (uses media list to pick photo vs video)",
+    )
+    action.add_argument("--download-page", action="store_true", help="Download all media items in one media-list page")
+    action.add_argument("--list-media-page", action="store_true", help="List one media-list page")
+    action.add_argument("--list-media-all", action="store_true", help="List all pages until stop condition")
+
+    parser.add_argument("--list-max-pages", type=int, default=DEFAULT_LIST_MAX_PAGES)
+    parser.add_argument("--page-no", type=int, default=DEFAULT_PAGE_NO)
+    parser.add_argument("--page-item-cnt", type=int, default=DEFAULT_PAGE_ITEM_CNT)
+
+    parser.add_argument("--media-out-dir", default="out/media")
+    parser.add_argument("--tmp-dir", default="out/tmp")
+    parser.add_argument("--dir-num", type=int, default=DEFAULT_DIR_NUM)
+    parser.add_argument("--video-out", default="")
+    return parser
+
+
 def _build_parser(
     *,
     client_cfg: ClientConfig,
     paths: PathsConfig,
-    camera: Optional[CameraConfig],
+    camera: CameraConfig,
+    camera_aliases: list[str],
     config_path: Optional[Path],
 ) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="TrailCam client runner.")
@@ -217,19 +240,9 @@ def _build_parser(
     )
     parser.add_argument(
         "--camera",
-        default=(camera.alias if camera else None),
-        help="Camera alias from config.yaml (if omitted and config has 1 camera, that one is used)",
-    )
-    parser.add_argument(
-        "--ble-address",
-        default=(camera.ble_address if camera else DEFAULT_BLE_ADDRESS),
-        help="BLE MAC address of the camera (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--ssid",
-        default=(camera.ssid if camera else None),
-        required=(camera is None or not camera.ssid),
-        help="Camera AP SSID to connect to (required unless provided by config.yaml)",
+        default=camera.alias,
+        choices=camera_aliases,
+        help="Camera alias from config.yaml",
     )
     parser.add_argument("--debug", action="store_true", help="Enable verbose logging of incoming packets")
 
@@ -286,14 +299,25 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
     - config.yaml overrides
     - CLI overrides
     """
+    argv_in = argv if argv is not None else sys.argv[1:]
     pre = _build_pre_parser()
-    pre_args, _ = pre.parse_known_args(argv)
+    pre_args, _ = pre.parse_known_args(argv_in)
     cfg_path = _resolve_config_path(pre_args.config)
-    if cfg_path is not None and pre_args.config and not cfg_path.exists():
+    if ("-h" in argv_in or "--help" in argv_in) and cfg_path is None:
+        _build_help_only_parser().parse_args(argv_in)
+        raise SystemExit(0)
+    if cfg_path is None:
+        raise SystemExit(
+            "No config file found. Create config.yaml (see config.example.yaml), "
+            "or pass --config /path/to/config.yaml"
+        )
+    if pre_args.config and not cfg_path.exists():
         raise SystemExit(f"--config path does not exist: {cfg_path}")
 
-    # load_config() returns a default config object if the file doesn't exist.
-    app_cfg = load_config(cfg_path or Path("config.yaml"))
+    try:
+        app_cfg = load_config(cfg_path)
+    except FileNotFoundError as e:
+        raise SystemExit(str(e))
 
     # If config didn't specify output dir, prefer /mnt/trailcam/staging when present.
     paths = app_cfg.paths
@@ -306,15 +330,22 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
         )
 
     # Choose camera: explicit --camera wins; else if config has one camera, use it.
-    camera: Optional[CameraConfig] = None
-    cam_alias = pre_args.camera
-    if cam_alias:
-        camera = app_cfg.get_camera(str(cam_alias))
+    camera_aliases = sorted(app_cfg.cameras.keys())
+    if pre_args.camera:
+        camera0 = app_cfg.get_camera(str(pre_args.camera))
     elif len(app_cfg.cameras) == 1:
-        camera = next(iter(app_cfg.cameras.values()))
+        camera0 = next(iter(app_cfg.cameras.values()))
+    else:
+        raise SystemExit(f"--camera is required (known: {camera_aliases})")
 
-    parser = _build_parser(client_cfg=app_cfg.client, paths=paths, camera=camera, config_path=cfg_path)
-    args = parser.parse_args(argv)
+    parser = _build_parser(
+        client_cfg=app_cfg.client,
+        paths=paths,
+        camera=camera0,
+        camera_aliases=camera_aliases,
+        config_path=cfg_path,
+    )
+    args = parser.parse_args(argv_in)
 
     if args.download_single is not None and args.download_single <= 0:
         raise SystemExit("--download-single MEDIA_NUM must be a positive integer")
@@ -347,9 +378,7 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
             "--list-media-page, --list-media-all"
         )
 
-    # Camera identity: config-derived defaults, CLI can override.
-    cam_alias_final = str(args.camera or (camera.alias if camera else "cli"))
-    cam = CameraConfig(alias=cam_alias_final, ble_address=str(args.ble_address), ssid=str(args.ssid).strip())
+    cam = app_cfg.get_camera(str(args.camera))
 
     # Config-only: values are taken from app_cfg.client (constants -> yaml). No CLI flags.
     client_cfg = ClientConfig(
