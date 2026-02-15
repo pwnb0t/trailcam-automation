@@ -9,14 +9,12 @@
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 
 ## Next Steps
-1. Remove remaining legacy/historical protocol artifacts from runtime code.
-
-2. Docs and Cleanup
-Update docs to reflect current architecture:
-- CLI/config parsing now lives in `src/config.py` (not `src/runner_inputs.py`).
-- Commands own behavior; flows should trend toward packet-level helpers.
-
-3. Add orchestrator (`trailcam_sync.py`) to download all media and optionally delete/format the card.
+* There are still some naming oddities.
+  * trailcam_client.py is probably a bad name particularly because TrailCamClient is in client.py
+    * Considered trailcam_runner.py or something to that effect. Might need naming suggestions.
+  * There are a lot of Configs and that don't exactly lineup like I thought they would.
+* Need an orchestration script (trailcam_sync.py)
+  * Resumable state file (perhaps a manifest of items to download and what is downloaded)
 
 
 
@@ -26,10 +24,6 @@ Update docs to reflect current architecture:
   * Currently does BLE wake -> AP join -> UDP handshake -> login.
   * If already on AP, then it skips BLE wake and AP join. But it is possible the trailcam has gone to sleep and we receive "TimeoutError: Did not see any inbound UDP from camera"
   * In this case, it should instead go back to BLE wake.
-* /mnt/trailcam is hooked up.
-    * Need to send files to /mnt/trailcam/staging then the final output to /mnt/trailcam/media
-* Need an orchestration script (trailcam_sync.py)
-    * Resumable state file (perhaps a manifest of items to download and what is downloaded)
 * File structure and naming/renaming
     * Download files to staging. Move files from staging to media and rename
     * front_YYYYMMDD_HHMMSS.jpg, back_20260213_132127.mp4, ...
