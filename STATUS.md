@@ -4,7 +4,7 @@
 - BLE wake and retrieve AP credentials (`ssid`/`pwd`).
 - Join camera AP via `nmcli`.
 - UDP handshake + login to obtain `login_token_u32`.
-- Media list (`cmdId=768`) and thumbnails (`cmdId=772`).
+- Media list (`cmdId=768`).
 - Photo download (`cmdId=1285`) and reconstruction of full-resolution JPEG.
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
 

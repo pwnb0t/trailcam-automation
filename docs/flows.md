@@ -11,11 +11,10 @@ This describes the high-level operation sequences the client performs.
   - Respond to keepalive (`0xE0`) with `0xE1`.
 - JSON login (`cmdId=0`) to obtain `login_token_u32`.
 
-## List Media (Dev Info + Media List + Thumbs)
+## List Media (Dev Info + Media List)
 - Send dev info (`cmdId=512`).
 - Send media list (`cmdId=768`) for `pageNo`.
-- Optionally request thumbnails (`cmdId=772`).
-- Parse `mediaFiles` entries and thumbnail records.
+- Parse `mediaFiles` entries.
   - The CLI supports fetching a single page (`--list-media-page`) or paging until stop (`--list-media-all`, capped by `--list-max-pages`).
 
 ## Download Page (Media list page + downloads)

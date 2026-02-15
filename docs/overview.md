@@ -6,7 +6,7 @@ This folder describes the on-wire protocol we have reverse engineered for the Tr
 - BLE wake + credentials: retrieve camera AP `ssid`/`pwd` over BLE.
 - Wi-Fi join: connect to the camera AP.
 - UDP handshake + login: establish the UDP session and obtain `login_token_u32` (from `cmdId=0` response).
-- Gallery: fetch media list (`cmdId=768`) and thumbnails (`cmdId=772`).
+- Gallery: fetch media list (`cmdId=768`).
 - Photo download: request and reconstruct a full-resolution JPEG via `cmdId=1285` and `D0 subtype 0x03` bulk transfer.
 - Video download/playback: request and reconstruct an MP4 via `cmdId=769`/`cmdId=770` and `D0 subtype 0x02` bulk transfer.
 
