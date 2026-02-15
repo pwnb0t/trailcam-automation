@@ -132,9 +132,7 @@ def load_config(path: str | Path) -> AppConfig:
             raise ValueError(f"cameras.{alias}.ssid is required")
         cams[str(alias)] = CameraConfig(alias=str(alias), ble_address=ble, ssid=ssid)
 
-    if "defaults" in raw and "client" in raw:
-        raise ValueError("Config must use only one of: 'client' (preferred) or legacy 'defaults'")
-    client_raw = raw.get("client", raw.get("defaults")) or {}
+    client_raw = raw.get("client") or {}
     if client_raw and not isinstance(client_raw, dict):
         raise ValueError("client must be a mapping")
     if "page_no" in client_raw:

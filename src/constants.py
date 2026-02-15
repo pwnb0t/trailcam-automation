@@ -24,8 +24,7 @@ MAX_PAGE_ITEM_CNT_EXCLUSIVE = 50
 AES_CMD_KEY = b"xs38nul7cqf7m1va"
 AES_CMD_IV = b"\x00" * 16
 
-# BLE defaults (from prior reverse-engineering)
-DEFAULT_BLE_ADDRESS = "C6:1E:0D:E0:0C:FB"
+# BLE constants (from reverse engineering)
 CHAR_WRITE = "00000002-0000-1000-8000-00805f9b34fb"
 CHAR_NOTIFY = "00000003-0000-1000-8000-00805f9b34fb"
 WAKE_PAYLOAD = bytes.fromhex(
