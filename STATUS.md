@@ -17,6 +17,7 @@
   * Load config
   * Create/resume state file (sync_state.yaml or sync_state.json)
     * Determine which is better for storing the state of the app
+    * Set cams to state=pending
   * State: download
     * If session.staging_manifest is None
       * Build a session.staging_manifest of items currently in staging dir (cfg.paths.media_out_dir)
@@ -45,13 +46,16 @@
       * e.g. /mnt/trailcam/staging/back/102/media940.jpg -> /mnt/trailcam/media/2026-01/back_20260101_144523_102-940.jpg
     * Rather than overwriting, we probably ought to make a `/mnt/trailcam/dupes` folder and dump anything in there in some sort of organized fashion
       * /mnt/trailcam/dupes/<todays-run-datetime>/102/media940.jpg
+    * Move state=done for this trailcam
 
 # sync_state arch
   cameras:
-    <alias>:
-      status: download, verify, clear, organize
-    back
-    front
+    <alias>: back, front, ...
+      status: pending, download, verify, clear, organize, done
+    back:
+      status: done
+    front:
+      status: pending
 
 
 
