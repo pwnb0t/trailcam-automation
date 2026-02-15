@@ -10,7 +10,7 @@
 
 ## Next Steps
 * There are still some naming oddities.
-  * trailcam_client.py is probably a bad name particularly because TrailCamClient is in client.py
+* client_runner.py is the CLI entrypoint for running one-off client operations against a camera.
     * Considered trailcam_runner.py or something to that effect. Might need naming suggestions.
 * Need an orchestration script (trailcam_sync.py)
   * Resumable state file (perhaps a manifest of items to download and what is downloaded)
@@ -30,7 +30,6 @@
     * Week cutoff should be Sundays at 8am. (I'll be running the script daily at 10am)
 
 * Code reorg
-    * Rename trailcam_client.py to trailcam_client_runner.py
     * Add trailcam_sync.py (orchestrator)
     * All the trailcam_client related files go in src/client/
     * All the trailcam_sync related files go in src/sync/
@@ -64,7 +63,7 @@
 Requires `config.yaml` (see `config.example.yaml`) with a `cameras:` entry for the alias you pass.
 
 ran:
-python3 trailcam_client.py --camera back --list-media-all
+python3 client_runner.py --camera back --list-media-all
 
 appeared to work and get all contents after quite some time (10+ minutes?)
 more output than the terminal buffer stored, but here's the tail end:
