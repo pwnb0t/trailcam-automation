@@ -207,6 +207,11 @@ def _build_help_only_parser() -> argparse.ArgumentParser:
         metavar="MEDIA_NUM",
         help="Download one media item by media number (uses media list to pick photo vs video)",
     )
+    action.add_argument(
+        "--delete-media-all",
+        action="store_true",
+        help="Delete all media from camera (currently implemented as SD format, cmdId=518)",
+    )
     action.add_argument("--download-page", action="store_true", help="Download all media items in one media-list page")
     action.add_argument("--list-media-page", action="store_true", help="List one media-list page")
     action.add_argument("--list-media-all", action="store_true", help="List all pages until stop condition")
@@ -252,6 +257,11 @@ def _build_parser(
         default=None,
         metavar="MEDIA_NUM",
         help="Download one media item by media number (uses media list to pick photo vs video)",
+    )
+    action.add_argument(
+        "--delete-media-all",
+        action="store_true",
+        help="Delete all media from camera (currently implemented as SD format, cmdId=518)",
     )
     action.add_argument("--download-page", action="store_true", help="Download all media items in one media-list page")
     action.add_argument("--list-media-page", action="store_true", help="List one media-list page")
@@ -359,6 +369,7 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
     for name in (
         "login_only",
         "download_single",
+        "delete_media_all",
         "download_page",
         "list_media_page",
         "list_media_all",
@@ -372,7 +383,7 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
             break
     if not op:
         raise SystemExit(
-            "Choose an action: --login-only, --download-single, --download-page, "
+            "Choose an action: --login-only, --download-single, --delete-media-all, --download-page, "
             "--list-media-page, --list-media-all"
         )
 

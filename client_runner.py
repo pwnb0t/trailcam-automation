@@ -4,6 +4,7 @@ import asyncio
 from src.connection.connection import connect_and_login
 from src.command.download_media_page_command import DownloadMediaPageCommand
 from src.command.download_single_command import DownloadSingleCommand
+from src.command.format_sd_card_command import FormatSdCardCommand
 from src.command.list_media_all_command import ListMediaAllCommand
 from src.command.list_media_page_command import ListMediaPageCommand
 from src.config import parse_config_and_args
@@ -21,6 +22,15 @@ async def main():
     if cfg.op == "download_single":
         r = DownloadSingleCommand(session).run()
         print(f"Wrote {r.get('kind')}: {r.get('path') or 'none'}")
+        return
+
+    if cfg.op == "delete_media_all":
+        r = FormatSdCardCommand(session).run()
+        print(
+            "Delete media all result (via format): "
+            f"result={r.get('result')} formatRet={r.get('formatRet')} "
+            f"sdTotalMB={r.get('sdTotalMB')} sdFreeMB={r.get('sdFreeMB')}"
+        )
         return
 
     if cfg.op == "download_page":
