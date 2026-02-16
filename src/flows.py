@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from src.client import TrailCamClient
 from src.constants import CAMERA_IP
 from src.session import TrailCamSession
+from src.command.path_utils import camera_media_root
 from src.protocol import (
     decrypt_payload_b64_bytes,
     decrypt_v4_media_data_pages,
@@ -32,6 +33,10 @@ def _media_file_path(out_root: str, dir_num: int, media_num: int, file_type: int
     d = _media_dir_path(out_root, dir_num)
     ext = ".mp4" if int(file_type) == 1 else ".jpg"
     return d / f"media{int(media_num):04d}{ext}"
+
+
+def _session_media_root(session: TrailCamSession) -> str:
+    return camera_media_root(str(session.cfg.paths.media_out_dir), str(session.cfg.camera.alias))
 
 
 def send_photo_download_flow(
@@ -316,7 +321,7 @@ def download_photo_to_out_item(session: TrailCamSession, dir_num: int, media_num
 
     Uses a temp dump directory under session.cfg.paths.tmp_dir and only keeps the final JPEG.
     """
-    out_root = str(session.cfg.paths.media_out_dir)
+    out_root = _session_media_root(session)
     temp_root = str(session.cfg.paths.tmp_dir)
 
     out_path = _media_file_path(out_root, dir_num, media_num, file_type=0)
@@ -382,7 +387,7 @@ def send_video_download_flow_item(
     debug = bool(session.cfg.debug)
 
     if not out_mp4_path:
-        out_mp4_path = str(_media_file_path(str(session.cfg.paths.media_out_dir), dir_num, media_num, file_type=1))
+        out_mp4_path = str(_media_file_path(_session_media_root(session), dir_num, media_num, file_type=1))
 
     # Avoid /tmp on small devices (often tmpfs) by default.
     temp_root_p = Path(str(session.cfg.paths.tmp_dir))

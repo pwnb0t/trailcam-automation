@@ -43,7 +43,7 @@ The header includes fields that match the requested media:
 ## Output
 
 The client writes to the stable output layout:
-- `out/media/<dirNum>/media####.jpg` for the requested `(dirNum, mediaNum)`.
+- `out/media/<camera_alias>/<dirNum>/media####.jpg` for the requested `(dirNum, mediaNum)`.
 
 ## Reference Implementation
 

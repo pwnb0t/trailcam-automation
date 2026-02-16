@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from src.command.command import Command, CommandError
-from src.command.path_utils import media_file_path
+from src.command.path_utils import camera_media_root, media_file_path
 from src.flows import (
     fetch_media_list_page,
     download_photo_to_out_item,
@@ -65,7 +65,8 @@ class DownloadSingleCommand(Command):
         if file_type == 1:
             out_mp4 = str(s.cfg.video_out or "").strip()
             if not out_mp4:
-                out_mp4 = media_file_path(str(s.cfg.paths.media_out_dir), dir_num, media_num, file_type=1)
+                out_root = camera_media_root(str(s.cfg.paths.media_out_dir), str(s.cfg.camera.alias))
+                out_mp4 = media_file_path(out_root, dir_num, media_num, file_type=1)
             send_video_download_flow_item(s, dir_num, media_num, out_mp4_path=out_mp4)
             return {"kind": "video", "dirNum": dir_num, "mediaNum": media_num, "path": str(out_mp4)}
 

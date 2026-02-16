@@ -10,7 +10,7 @@ from src.flows import (
 )
 from src.session import TrailCamSession
 from src.command.command import Command, CommandError
-from src.command.path_utils import media_file_path
+from src.command.path_utils import camera_media_root, media_file_path
 
 
 @dataclass
@@ -34,7 +34,7 @@ class DownloadMediaPageCommand(Command):
         self.validate()
         s = self.session
         page_no = int(s.cfg.client.page_no)
-        out_root = str(s.cfg.paths.media_out_dir)
+        out_root = camera_media_root(str(s.cfg.paths.media_out_dir), str(s.cfg.camera.alias))
         entries = fetch_media_list_page(s)
         if not entries:
             print("No media entries found on requested page.")
