@@ -21,7 +21,7 @@ class ScanHit:
 
 def _looks_like_trailcam(name: str, service_uuids: list[str]) -> bool:
     n = (name or "").strip().lower()
-    if "trailcam" in n:
+    if "trailcam" in n or n.startswith("tc100_"):
         return True
     # Current camera advertises these custom services/chars.
     # Keeping this as a fallback for empty/odd local names.
@@ -44,7 +44,8 @@ async def run_scan(duration_s: float, rounds: int, show_all: bool) -> tuple[Dict
             service_uuids = list(adv.service_uuids or [])
             manuf = adv.manufacturer_data or {}
             manuf_keys = [f"0x{k:04x}" for k in sorted(manuf.keys())]
-            rssi = int(device.rssi if device.rssi is not None else -999)
+            rssi_src = adv.rssi if getattr(adv, "rssi", None) is not None else device.rssi
+            rssi = int(rssi_src if rssi_src is not None else -999)
 
             prev_all: Optional[ScanHit] = all_seen.get(address)
             if prev_all is None:
