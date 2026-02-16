@@ -47,3 +47,14 @@ This describes the high-level operation sequences the client performs.
   - Audio records produce ADTS AAC.
 - Write `video.h264` and `audio.aac` to a temp directory, mux to MP4 with ffmpeg, then save to the final output path.
 - Send `cmdId=770` stop-play request.
+
+## Delete Media (cmdId=773)
+- Send `cmdId=773` with `(fileType, dirNum, mediaNum, token)`.
+- Receive JSON response with `delRet` / `result` / `cmdId=773`.
+- Observed for both photo and video deletes in `pcap/trailcam_11-*`.
+
+## Format SD Card (cmdId=518)
+- Send `cmdId=518` with `token`.
+- App appears to send it more than once in the capture.
+- Receive JSON response with `formatRet`, `result`, and `sdTotalMB`/`sdFreeMB`.
+- Observed in `pcap/trailcam_12-format.pcap`.

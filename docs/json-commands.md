@@ -69,3 +69,27 @@ The actual media payload is then delivered via bulk streams (commonly `D0 subtyp
 
 Client sends:
 - `{"cmdId":770,"token":<login_token_u32>}`
+
+## Delete Media (`cmdId=773`)
+
+Observed in:
+- `pcap/trailcam_11-2-delete-photo2.pcap`
+- `pcap/trailcam_11-3-delete-video.pcap`
+
+Client sends:
+- `{"cmdId":773,"fileType":0/1,"dirNum":...,"mediaNum":...,"token":<login_token_u32>}`
+
+Camera replies:
+- `{"delRet":0,"result":0,"cmdId":773}` on success.
+
+## Format SD Card (`cmdId=518`)
+
+Observed in:
+- `pcap/trailcam_12-format.pcap`
+
+Client sends:
+- `{"cmdId":518,"token":<login_token_u32>}`
+- Commonly sent more than once (retries/redundant sends observed).
+
+Camera replies:
+- `{"errorMsg":"Success","sdTotalMB":...,"sdFreeMB":...,"formatRet":0,"result":0,"cmdId":518}` on success.

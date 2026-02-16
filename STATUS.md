@@ -7,6 +7,7 @@
 - Media list (`cmdId=768`).
 - Photo download (`cmdId=1285`) and reconstruction of full-resolution JPEG.
 - Video download/playback (`cmdId=769` start, `D0 subtype=0x02` decrypt, `cmdId=770` stop) and reconstruction of MP4 (H.264 + AAC).
+- Reverse engineered commands for delete (`cmdId=773`) and SD format (`cmdId=518`) from new pcaps.
 
 ## Next Steps
 * Need an orchestration script (trailcam_sync.py)
