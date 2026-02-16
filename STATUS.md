@@ -126,3 +126,14 @@ more output than the terminal buffer stored, but here's the tail end:
   dir=100 media=2 fileType=0 name= time=1768488742 durMs=
   dir=100 media=1 fileType=1 name= time=1768488748 durMs=10320
 ```
+
+
+-----
+
+Back Camera
+SSID: TrailCam_5DBD
+Device ID: C6:1E:0D:E0:0C:FB
+
+Front Camera (new)
+SSID: TrailCam_1DF9
+Device ID: C6:1E:0D:e0:09:25

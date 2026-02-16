@@ -5,6 +5,9 @@ cameras:
   back:
     ble_address: "C6:1E:0D:E0:0C:FB"
     ssid: "TrailCam_5DBD"
+  front:
+    ble_address: "C6:1E:0D:E0:09:25"
+    ssid: "TrailCam_1D79"
 
 # Client config values are used unless overridden on the CLI (where allowed).
 client:
