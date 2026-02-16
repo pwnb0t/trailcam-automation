@@ -7,6 +7,7 @@ from dataclasses import dataclass, asdict
 from typing import Dict, Optional
 
 from bleak import BleakScanner
+from src.connection.ble import ble_wake_and_get_creds
 
 
 @dataclass
@@ -104,6 +105,39 @@ def _print_table(found: Dict[str, ScanHit]) -> None:
         print(f"{h.address:19}  {h.rssi:4d}  {h.seen_count:4d}  {h.name or '-'}")
 
 
+async def _fetch_ssids_for_hits(found: Dict[str, ScanHit]) -> dict[str, str]:
+    ssids: dict[str, str] = {}
+    rows = sorted(found.values(), key=lambda x: (-x.rssi, x.address))
+    for h in rows:
+        try:
+            creds = await ble_wake_and_get_creds(h.address)
+            ssid = str(creds.get("ssid") or "").strip()
+            if ssid:
+                ssids[h.address] = ssid
+                print(f"ssid fetched: {h.address} -> {ssid}")
+            else:
+                print(f"ssid fetch failed (empty): {h.address}")
+        except Exception as e:
+            print(f"ssid fetch failed: {h.address} ({e})")
+    return ssids
+
+
+def _print_config_snippet(found: Dict[str, ScanHit], ssids: Optional[dict[str, str]] = None) -> None:
+    rows = sorted(found.values(), key=lambda x: (-x.rssi, x.address))
+    if not rows:
+        print("\ncameras:\n  # no matching cameras found")
+        return
+    print("\ncameras:")
+    for i, h in enumerate(rows, start=1):
+        alias = f"camera{i}"
+        ssid = ""
+        if ssids:
+            ssid = ssids.get(h.address, "")
+        print(f"  {alias}:")
+        print(f"    ble_address: \"{h.address}\"")
+        print(f"    ssid: \"{ssid}\"")
+
+
 async def main() -> int:
     p = argparse.ArgumentParser(
         description="Scan BLE and print TrailCam-like devices (MAC addresses).",
@@ -112,6 +146,12 @@ async def main() -> int:
     p.add_argument("--rounds", type=int, default=2, help="number of rounds (default: %(default)s)")
     p.add_argument("--all", action="store_true", help="show all BLE devices, not just TrailCam-like ones")
     p.add_argument("--json", action="store_true", help="print machine-readable JSON instead of table")
+    p.add_argument("--config-snippet", action="store_true", help="print cameras: YAML snippet")
+    p.add_argument(
+        "--fetch-ssid",
+        action="store_true",
+        help="for each matched camera, BLE wake and fetch real SSID for config snippet",
+    )
     args = p.parse_args()
 
     if args.duration <= 0:
@@ -138,6 +178,12 @@ async def main() -> int:
             print("\nTry:")
             print("  python3 tools/scan_trailcam_ble.py --all --duration 10 --rounds 3")
             print("  python3 tools/scan_trailcam_ble.py --duration 12 --rounds 4")
+
+    ssids: Optional[dict[str, str]] = None
+    if args.fetch_ssid and found:
+        ssids = await _fetch_ssids_for_hits(found)
+    if args.config_snippet:
+        _print_config_snippet(found, ssids=ssids)
     return 0 if found else 1
 
 
