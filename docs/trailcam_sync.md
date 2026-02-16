@@ -7,7 +7,7 @@ This document is a concrete plan for building `trailcam_sync.py`, which will orc
 - Download all media items (photos + videos) from each camera to a **staging** area.
 - Organize staged files into a stable **final** layout.
 - Be **resumable**: safe to re-run after crashes/network failures without re-downloading everything.
-- Do **not** delete/format the SD card yet; defer destructive operations until sync is reliable.
+- Clear media from camera only after successful download+verify.
 
 ## Assumptions / Conventions
 - `config.yaml` defines camera aliases under `cameras:` (eg `back`, `front`).
@@ -30,25 +30,24 @@ State machine (persisted per camera):
 - Build `staging_manifest` by scanning staged files on disk for this camera alias.
 - Build `trailcam_manifest` by listing camera media pages until stop condition.
 - Compute missing items = `trailcam_manifest - staging_manifest`.
+- Before downloading, clean stale temp files for this alias under `cfg.paths.tmp_dir/<alias>/`.
 - Download missing items to staging using the existing packet-level implementations:
   - Photos via `download_photo_to_out_item(session, dirNum, mediaNum)`
   - Videos via `send_video_download_flow_item(session, dirNum, mediaNum, out_mp4_path=...)`
 - Write staged outputs into `.../<alias>/<dirNum>/media####.{jpg|mp4}` to match the existing stable layout, but under the alias prefix directory.
+- File-level resume: only mark an item downloaded after successful validation and atomic move into staging (never mark partial temp output as downloaded).
 - Update sync state after each successful item (atomic state save).
 - Transition to `verify`.
 
 ### State: `verify`
-Purpose: confirm the staging set matches the camera set without requiring a full expensive relist every time.
-- Rebuild `staging_manifest` from disk (cheap).
-- Re-list a bounded number of newest pages from the camera:
-  - If any items in these pages are missing from staging, transition back to `download`.
-- If verify passes, transition to `clear`.
-
-Fallback:
-- If “bounded verify” repeatedly detects gaps, do a full camera manifest rebuild and re-compute missing.
+Purpose: confirm staging and camera are fully aligned before clear.
+- Rebuild `staging_manifest` from disk.
+- Rebuild full `trailcam_manifest` from camera (full relist).
+- If manifests differ, transition back to `download` using the rebuilt manifests.
+- If manifests match, transition to `clear`.
 
 ### State: `clear`
-- Delete all media from camera
+- Delete all media from camera (currently mapped to `cmdId=518` via `--delete-media-all`)
 - Transition to `organize`.
 
 ### State: `organize`
@@ -84,11 +83,22 @@ Suggested schema:
     "back": {
       "status": "download",
       "downloaded": {
-        "102:940:0": {"staged_path": "/mnt/trailcam/staging/back/102/media0940.jpg", "size": 5821934},
-        "102:941:1": {"staged_path": "/mnt/trailcam/staging/back/102/media0941.mp4", "size": 12345678}
+        "102:940:0": {
+          "staged_path": "/mnt/trailcam/staging/back/102/media0940.jpg",
+          "size": 5821934,
+          "first_seen_at": "2026-02-15T10:15:00Z"
+        },
+        "102:941:1": {
+          "staged_path": "/mnt/trailcam/staging/back/102/media0941.mp4",
+          "size": 12345678,
+          "first_seen_at": "2026-02-15T10:15:02Z"
+        }
       },
       "organized": {
-        "102:940:0": {"final_path": "/mnt/trailcam/media/2026-07/back_20260211_115129_102-940.jpg"}
+        "102:940:0": {
+          "final_path": "/mnt/trailcam/media/2026-07/back_20260211_115129_102-940.jpg",
+          "final_ts_source": "mediaTime"
+        }
       },
       "last_seen_head": {"102": 940}
     }
@@ -98,6 +108,11 @@ Suggested schema:
 
 Key choice:
 - Use `(dirNum, mediaNum, fileType)` as the primary key. This matches the protocol’s stable identifiers and is sufficient for “resume and skip”.
+
+Timestamp policy for final naming:
+- Source priority: `mediaTime` (if valid) -> embedded media timestamp (EXIF/container) -> per-item `first_seen_at` from sync state.
+- `first_seen_at` is set once when an item key is first discovered and must remain stable across reruns.
+- Do not use wall-clock "now" directly for naming unless it is persisted as that item’s `first_seen_at`.
 
 ## Proposed Code Layout
 Create a new `src/sync/` package and keep protocol logic out of it.
@@ -158,7 +173,12 @@ class Organizer:
     def move_one(self, src: Path, dst: Path, *, run_id: str) -> str: ...  # "moved|skipped|dupe"
 ```
 
-## Open Items To Decide Before Implementation
-- Where does sync state live on Pi? --> `out/state/`
-- Whether staging and final are always on the same filesystem (affects move vs copy+delete). --> Same filesystem
-- Whether to keep the “raw stable layout” permanently, or only keep organized outputs. --> only keep organized final layout after all media is moved
+## Decisions Already Made
+- Sync state file location: `out/state/`
+- Staging and final are on the same filesystem (prefer move/rename)
+- Keep only organized final layout after run; staging is temporary
+- Staging layout is per camera alias: `cfg.paths.staging_dir/<alias>/<dirNum>/media####.<ext>`
+- Clear method: use format (`cmdId=518`) in `clear`.
+- Verify method: always rebuild both manifests fully; if mismatch, return to `download`.
+- Resume granularity: file-level resume only (no chunk-level resume in v1).
+- Temp handling: download fragments live under `cfg.paths.tmp_dir/<alias>/`; clear stale temp artifacts before each camera run.
