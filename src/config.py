@@ -343,6 +343,9 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
         camera0 = app_cfg.get_camera(str(pre_args.camera))
     elif len(app_cfg.cameras) == 1:
         camera0 = next(iter(app_cfg.cameras.values()))
+    elif ("-h" in argv_in or "--help" in argv_in):
+        # Allow help output without forcing --camera when multiple cameras exist.
+        camera0 = next(iter(app_cfg.cameras.values()))
     else:
         raise SystemExit(f"--camera is required (known: {camera_aliases})")
 
