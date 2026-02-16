@@ -57,3 +57,21 @@ Size: 5.4 MB
 Pixels: 5120x2880 (14.7 MP)
 
 I have now stored DSCF0940.JPG in this folder along side.
+
+
+# trailcam_11-*.pcap
+## 1-add-device
+Added the new trailcam and I think it also connected after adding. I don't know if adding the trailcam to the app does any sort of special command to the trailcam, but if it does, it should be in here.
+
+## 2-delete-photo
+I think delete-photo somehow has some extra stuff in there. I suspect it also has the "preview photo" operation in there and then delete.
+
+## 2-delete-photo2
+I think this one is just deleting a photo and nothing else (beyond heartbeats)
+
+## 3-delete-video
+This should be deleting just a video
+
+## trailcam_12-format.pcap
+There was only one item left on the sdcard. I suspect the number of items does not matter and this is just formatting the memory card.
+
