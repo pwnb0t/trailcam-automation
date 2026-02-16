@@ -17,17 +17,12 @@ This document is a concrete plan for building `trailcam_sync.py`, which will orc
   - `/mnt/trailcam/media/YYYY-WW/<alias>_<YYYYMMDD>_<HHMMSS>_<dirNum>-<mediaNum>.<jpg|mp4>`
 - Week cutoff logic: Sunday 08:00 local time (as noted in `STATUS.md`).
 
-## Non-Goals (First Iteration)
-- Deleting individual files on the camera.
-- Formatting the SD card.
-- Multi-host coordination (Pi vs laptop) beyond “run on Pi where BLE/Wi-Fi works”.
-
 ## High-Level Flow (Per Camera)
 State machine (persisted per camera):
 1. `pending`
 2. `download`
 3. `verify`
-4. `clear` (placeholder: TODO; no destructive actions yet)
+4. `clear`
 5. `organize`
 6. `done`
 
@@ -53,8 +48,7 @@ Fallback:
 - If “bounded verify” repeatedly detects gaps, do a full camera manifest rebuild and re-compute missing.
 
 ### State: `clear`
-- Placeholder in v1.
-- Print `TODO - format cam: <alias>` (or noop).
+- Delete all media from camera
 - Transition to `organize`.
 
 ### State: `organize`
@@ -79,7 +73,7 @@ When building `trailcam_manifest`, stop paging when one of these holds:
 Prefer JSON for state (safe machine writes); YAML stays for config.
 
 Proposed file:
-- `out/state/trailcam_sync_state.json` for local runs, or `/mnt/trailcam/state/trailcam_sync_state.json` on Pi.
+- `out/state/trailcam_sync_state.json`
 
 Suggested schema:
 ```json
@@ -165,6 +159,6 @@ class Organizer:
 ```
 
 ## Open Items To Decide Before Implementation
-- Where does sync state live on Pi? `out/state/` vs `/mnt/trailcam/state/`.
-- Whether staging and final are always on the same filesystem (affects move vs copy+delete).
-- Whether to keep the “raw stable layout” permanently, or only keep organized outputs.
+- Where does sync state live on Pi? --> `out/state/`
+- Whether staging and final are always on the same filesystem (affects move vs copy+delete). --> Same filesystem
+- Whether to keep the “raw stable layout” permanently, or only keep organized outputs. --> only keep organized final layout after all media is moved
