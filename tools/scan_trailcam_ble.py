@@ -4,9 +4,16 @@ import asyncio
 import json
 import sys
 from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import Dict, Optional
 
 from bleak import BleakScanner
+
+# Allow running as `python3 tools/scan_trailcam_ble.py` by adding repo root.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from src.connection.ble import ble_wake_and_get_creds
 
 
