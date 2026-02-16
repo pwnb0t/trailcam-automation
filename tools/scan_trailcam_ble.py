@@ -31,8 +31,9 @@ def _looks_like_trailcam(name: str, service_uuids: list[str]) -> bool:
     return False
 
 
-async def run_scan(duration_s: float, rounds: int, show_all: bool) -> Dict[str, ScanHit]:
+async def run_scan(duration_s: float, rounds: int, show_all: bool) -> tuple[Dict[str, ScanHit], Dict[str, ScanHit]]:
     found: Dict[str, ScanHit] = {}
+    all_seen: Dict[str, ScanHit] = {}
     for i in range(1, rounds + 1):
         devices = await BleakScanner.discover(timeout=duration_s, return_adv=True)
         for _key, (device, adv) in devices.items():
@@ -41,12 +42,30 @@ async def run_scan(duration_s: float, rounds: int, show_all: bool) -> Dict[str, 
                 continue
             name = str((adv.local_name or device.name or "")).strip()
             service_uuids = list(adv.service_uuids or [])
-            if not show_all and not _looks_like_trailcam(name, service_uuids):
-                continue
-
             manuf = adv.manufacturer_data or {}
             manuf_keys = [f"0x{k:04x}" for k in sorted(manuf.keys())]
             rssi = int(device.rssi if device.rssi is not None else -999)
+
+            prev_all: Optional[ScanHit] = all_seen.get(address)
+            if prev_all is None:
+                all_seen[address] = ScanHit(
+                    address=address,
+                    name=name,
+                    rssi=rssi,
+                    service_uuids=service_uuids,
+                    manufacturer_data_keys=manuf_keys,
+                )
+            else:
+                prev_all.seen_count += 1
+                if rssi > prev_all.rssi:
+                    prev_all.rssi = rssi
+                if name:
+                    prev_all.name = name
+                prev_all.service_uuids = sorted(set(prev_all.service_uuids).union(service_uuids))
+                prev_all.manufacturer_data_keys = sorted(set(prev_all.manufacturer_data_keys).union(manuf_keys))
+
+            if not show_all and not _looks_like_trailcam(name, service_uuids):
+                continue
 
             prev: Optional[ScanHit] = found.get(address)
             if prev is None:
@@ -68,8 +87,8 @@ async def run_scan(duration_s: float, rounds: int, show_all: bool) -> Dict[str, 
                 # Merge seen UUIDs/keys.
                 prev.service_uuids = sorted(set(prev.service_uuids).union(service_uuids))
                 prev.manufacturer_data_keys = sorted(set(prev.manufacturer_data_keys).union(manuf_keys))
-        print(f"round {i}/{rounds}: {len(found)} matching device(s)")
-    return found
+        print(f"round {i}/{rounds}: {len(found)} matching device(s), {len(all_seen)} total device(s)")
+    return found, all_seen
 
 
 def _print_table(found: Dict[str, ScanHit]) -> None:
@@ -101,14 +120,25 @@ async def main() -> int:
         print("--rounds must be > 0", file=sys.stderr)
         return 2
 
-    found = await run_scan(duration_s=float(args.duration), rounds=int(args.rounds), show_all=bool(args.all))
+    found, all_seen = await run_scan(duration_s=float(args.duration), rounds=int(args.rounds), show_all=bool(args.all))
     if args.json:
         print(json.dumps([asdict(x) for x in sorted(found.values(), key=lambda v: v.address)], indent=2))
     else:
         _print_table(found)
+        if not found and not args.all:
+            print("\nNo TrailCam-like matches were found.")
+            if all_seen:
+                sample = sorted(all_seen.values(), key=lambda x: (-x.rssi, x.address))[:10]
+                print(f"BLE scanner did see {len(all_seen)} device(s). Top {len(sample)} by RSSI:")
+                print("address              rssi  name")
+                print("-------------------  ----  ----------------")
+                for h in sample:
+                    print(f"{h.address:19}  {h.rssi:4d}  {h.name or '-'}")
+            print("\nTry:")
+            print("  python3 tools/scan_trailcam_ble.py --all --duration 10 --rounds 3")
+            print("  python3 tools/scan_trailcam_ble.py --duration 12 --rounds 4")
     return 0 if found else 1
 
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))
-
