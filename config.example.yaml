@@ -25,6 +25,6 @@ client:
 paths:
   # Staging area for raw downloads before organize/sync.
   staging_dir: "/mnt/trailcam/staging"
-  # Optional final organized media root (used by sync/orchestration flow).
+  # Final organized media root (used by sync/orchestration flow).
   final_media_dir: "/mnt/trailcam/media"
   tmp_dir: "out/tmp"
