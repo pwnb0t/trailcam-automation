@@ -12,7 +12,7 @@ This document is a concrete plan for building `trailcam_sync.py`, which will orc
 ## Assumptions / Conventions
 - `config.yaml` defines camera aliases under `cameras:` (eg `back`, `front`).
 - Staging will be per-camera:
-  - `cfg.paths.media_out_dir/<alias>/...` (eg `/mnt/trailcam/staging/back/...`)
+  - `cfg.paths.staging_dir/<alias>/...` (eg `/mnt/trailcam/staging/back/...`)
 - Final layout will preserve `(dirNum, mediaNum)` in filename for traceability:
   - `/mnt/trailcam/media/YYYY-WW/<alias>_<YYYYMMDD>_<HHMMSS>_<dirNum>-<mediaNum>.<jpg|mp4>`
 - Week cutoff logic: Sunday 08:00 local time (as noted in `STATUS.md`).
@@ -168,4 +168,3 @@ class Organizer:
 - Where does sync state live on Pi? `out/state/` vs `/mnt/trailcam/state/`.
 - Whether staging and final are always on the same filesystem (affects move vs copy+delete).
 - Whether to keep the “raw stable layout” permanently, or only keep organized outputs.
-

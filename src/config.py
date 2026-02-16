@@ -74,10 +74,8 @@ class ClientConfig:
 
 @dataclass(frozen=True)
 class PathsConfig:
-    media_out_dir: str = "out/media"
+    staging_dir: str = "out/media"
     tmp_dir: str = "out/tmp"
-
-    staging_dir: Optional[str] = None
     final_media_dir: Optional[str] = None
 
 
@@ -154,16 +152,16 @@ def load_config(path: str | Path) -> AppConfig:
     if paths_raw and not isinstance(paths_raw, dict):
         raise ValueError("paths must be a mapping")
     paths = PathsConfig(
-        media_out_dir=str(paths_raw.get("media_out_dir", "out/media")),
+        # prefer staging_dir; accept media_out_dir as legacy alias
+        staging_dir=str(paths_raw.get("staging_dir", paths_raw.get("media_out_dir", "out/media"))),
         tmp_dir=str(paths_raw.get("tmp_dir", "out/tmp")),
-        staging_dir=(str(paths_raw["staging_dir"]) if "staging_dir" in paths_raw else None),
         final_media_dir=(str(paths_raw["final_media_dir"]) if "final_media_dir" in paths_raw else None),
     )
 
     return AppConfig(version=ver, cameras=cams, client=c, paths=paths)
 
 
-def _default_media_out_dir() -> str:
+def _default_staging_dir() -> str:
     p = Path("/mnt/trailcam/staging")
     try:
         if p.exists() and p.is_dir():
@@ -220,7 +218,7 @@ def _build_help_only_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-no", type=int, default=DEFAULT_PAGE_NO)
     parser.add_argument("--page-item-cnt", type=int, default=DEFAULT_PAGE_ITEM_CNT)
 
-    parser.add_argument("--media-out-dir", default="out/media")
+    parser.add_argument("--staging-dir", default="out/media")
     parser.add_argument("--tmp-dir", default="out/tmp")
     parser.add_argument("--dir-num", type=int, default=DEFAULT_DIR_NUM)
     parser.add_argument("--video-out", default="")
@@ -287,8 +285,8 @@ def _build_parser(
     )
 
     parser.add_argument(
-        "--media-out-dir",
-        default=str(paths.media_out_dir),
+        "--staging-dir",
+        default=str(paths.staging_dir),
         help="Output directory root for downloads (default: %(default)s)",
     )
     parser.add_argument("--tmp-dir", default=str(paths.tmp_dir), help="Temp directory root (default: %(default)s)")
@@ -329,11 +327,10 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
 
     # If config didn't specify output dir, prefer /mnt/trailcam/staging when present.
     paths = app_cfg.paths
-    if paths.media_out_dir == "out/media":
+    if paths.staging_dir == "out/media":
         paths = PathsConfig(
-            media_out_dir=_default_media_out_dir(),
+            staging_dir=_default_staging_dir(),
             tmp_dir=paths.tmp_dir,
-            staging_dir=paths.staging_dir,
             final_media_dir=paths.final_media_dir,
         )
 
@@ -404,11 +401,11 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
         video_fps=int(app_cfg.client.video_fps),
     )
 
-    # Paths: allow CLI override of media/tmp dirs.
-    run_paths = PathsConfig(media_out_dir=str(args.media_out_dir), tmp_dir=str(args.tmp_dir))
+    # Paths: allow CLI override of staging/tmp dirs.
+    run_paths = PathsConfig(staging_dir=str(args.staging_dir), tmp_dir=str(args.tmp_dir))
 
     # Ensure output dirs exist for local runs.
-    Path(run_paths.media_out_dir).mkdir(parents=True, exist_ok=True)
+    Path(run_paths.staging_dir).mkdir(parents=True, exist_ok=True)
     Path(run_paths.tmp_dir).mkdir(parents=True, exist_ok=True)
 
     return RunnerConfig(

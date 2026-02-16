@@ -36,7 +36,7 @@ def _media_file_path(out_root: str, dir_num: int, media_num: int, file_type: int
 
 
 def _session_media_root(session: TrailCamSession) -> str:
-    return camera_media_root(str(session.cfg.paths.media_out_dir), str(session.cfg.camera.alias))
+    return camera_media_root(str(session.cfg.paths.staging_dir), str(session.cfg.camera.alias))
 
 
 def send_photo_download_flow(

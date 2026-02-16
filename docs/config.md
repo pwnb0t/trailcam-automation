@@ -15,7 +15,7 @@ See `config.example.yaml` (you can name your real file `config.yaml` or `config.
 - Put default knobs under `client:` (wifi interface, UDP bind port, page sizes, timeouts).
   - Note: `client.page_no` is intentionally CLI-only; do not put it in config.yaml.
 - Put output paths under `paths:`.
-  - On `piiter`, `/mnt/trailcam/staging` is the intended `media_out_dir`.
+  - On `piiter`, `/mnt/trailcam/staging` is the intended `staging_dir`.
 
 ## Notes
 

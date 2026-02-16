@@ -21,7 +21,7 @@
     * Set cams to state=pending
   * State: download
     * If session.staging_manifest is None
-      * Build a session.staging_manifest of items currently in staging dir (cfg.paths.media_out_dir)
+      * Build a session.staging_manifest of items currently in staging dir (cfg.paths.staging_dir)
     * If session.trailcam_manifest is None
       * Build a session.trailcam_manifest of items on the trailcam
     * Determine which items are missing from the staging dir and download them from the trailcam using client_runner.py
@@ -29,7 +29,7 @@
     * set state=verify and clear session.staging_manifest and session.trailcam_manifest
   * State: verify
     * If session.staging_manifest is None
-      * Build a session.staging_manifest of items currently in staging dir (cfg.paths.media_out_dir)
+      * Build a session.staging_manifest of items currently in staging dir (cfg.paths.staging_dir)
     * If session.trailcam_manifest is None
       * Build a session.trailcam_manifest of items on the trailcam
     * If there are any non-downloaded items (items on trailcam_manifest that are not on staging_manifest)
@@ -43,7 +43,7 @@
     * move to state=organize
   * State: organize
     * Ensure session.staging_manifest is not None, otherwise error out
-    * Moves items from staging dir (cfg.paths.media_out_dir, /mnt/trailcam/staging) to final dir (/mnt/trailcam/media/YYYY-WW/<alias>_YYYYMMDD_HHMMSS_<dirNum>-<mediaNum>.<jpg|mp4>)
+    * Moves items from staging dir (cfg.paths.staging_dir, /mnt/trailcam/staging) to final dir (/mnt/trailcam/media/YYYY-WW/<alias>_YYYYMMDD_HHMMSS_<dirNum>-<mediaNum>.<jpg|mp4>)
       * e.g. /mnt/trailcam/staging/back/102/media940.jpg -> /mnt/trailcam/media/2026-01/back_20260101_144523_102-940.jpg
     * Rather than overwriting, we probably ought to make a `/mnt/trailcam/dupes` folder and dump anything in there in some sort of organized fashion
       * /mnt/trailcam/dupes/<todays-run-datetime>/102/media940.jpg
