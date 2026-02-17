@@ -19,6 +19,7 @@ client:
 
   download_listen_s: 48.0
   download_idle_s: 4.0
+  photo_download_retries: 3
 
   video_fps: 30
 

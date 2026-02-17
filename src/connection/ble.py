@@ -7,7 +7,12 @@ from bleak import BleakClient
 from src.constants import CHAR_NOTIFY, CHAR_WRITE, WAKE_PAYLOAD
 
 
-async def ble_wake_and_get_creds(address: str) -> Dict[str, str]:
+def _is_bluez_in_progress_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return ("org.bluez.Error.InProgress" in msg) or ("Operation already in progress" in msg)
+
+
+async def _ble_wake_and_get_creds_once(address: str) -> Dict[str, str]:
     creds = {"ssid": None, "pwd": None}
 
     # Bleak/BlueZ on some systems intermittently throws DBus EOFError during
@@ -58,3 +63,22 @@ async def ble_wake_and_get_creds(address: str) -> Dict[str, str]:
     if not creds["ssid"] or not creds["pwd"]:
         raise RuntimeError("Did not parse SSID/PWD from BLE notifications")
     return creds  # type: ignore
+
+
+async def ble_wake_and_get_creds(address: str, *, retries: int = 5, retry_delay_s: float = 1.0) -> Dict[str, str]:
+    last_err: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return await _ble_wake_and_get_creds_once(address)
+        except Exception as e:
+            last_err = e
+            if _is_bluez_in_progress_error(e) and attempt < retries:
+                print(
+                    f"BLE busy (InProgress), retrying {attempt}/{retries} after {retry_delay_s:.1f}s ..."
+                )
+                await asyncio.sleep(retry_delay_s)
+                continue
+            raise
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError("ble_wake_and_get_creds failed unexpectedly")

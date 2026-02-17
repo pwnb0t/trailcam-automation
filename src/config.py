@@ -16,6 +16,7 @@ from src.constants import (
     DEFAULT_LIST_MAX_PAGES,
     DEFAULT_DOWNLOAD_LISTEN_S,
     DEFAULT_DOWNLOAD_IDLE_S,
+    DEFAULT_PHOTO_DOWNLOAD_RETRIES,
     DEFAULT_VIDEO_FPS,
     DEFAULT_DIR_NUM,
     MAX_PAGE_ITEM_CNT_EXCLUSIVE,
@@ -68,6 +69,7 @@ class ClientConfig:
 
     download_listen_s: float = DEFAULT_DOWNLOAD_LISTEN_S
     download_idle_s: float = DEFAULT_DOWNLOAD_IDLE_S
+    photo_download_retries: int = DEFAULT_PHOTO_DOWNLOAD_RETRIES
 
     video_fps: int = DEFAULT_VIDEO_FPS
 
@@ -145,6 +147,10 @@ def load_config(path: str | Path) -> AppConfig:
             client_raw.get("download_listen_s", DEFAULT_DOWNLOAD_LISTEN_S), "client.download_listen_s"
         ),
         download_idle_s=_must_float(client_raw.get("download_idle_s", DEFAULT_DOWNLOAD_IDLE_S), "client.download_idle_s"),
+        photo_download_retries=_must_int(
+            client_raw.get("photo_download_retries", DEFAULT_PHOTO_DOWNLOAD_RETRIES),
+            "client.photo_download_retries",
+        ),
         video_fps=_must_int(client_raw.get("video_fps", DEFAULT_VIDEO_FPS), "client.video_fps"),
     )
 
@@ -398,6 +404,7 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
         list_max_pages=int(args.list_max_pages),
         download_listen_s=float(app_cfg.client.download_listen_s),
         download_idle_s=float(app_cfg.client.download_idle_s),
+        photo_download_retries=int(app_cfg.client.photo_download_retries),
         video_fps=int(app_cfg.client.video_fps),
     )
 

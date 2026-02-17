@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -153,6 +154,7 @@ class SyncRunner:
             list_max_pages=c.list_max_pages,
             download_listen_s=c.download_listen_s,
             download_idle_s=c.download_idle_s,
+            photo_download_retries=c.photo_download_retries,
             video_fps=c.video_fps,
         )
 
@@ -199,10 +201,22 @@ class SyncRunner:
                 first_seen = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
             if key.file_type == 0:
-                out = download_photo_to_out_item(session, key.dir_num, key.media_num)
-                if out is None:
-                    raise RuntimeError(f"Photo download failed dir={key.dir_num} media={key.media_num}")
-                out_path = out
+                retries = max(1, int(session.cfg.client.photo_download_retries))
+                out_path = None
+                for attempt in range(1, retries + 1):
+                    out = download_photo_to_out_item(session, key.dir_num, key.media_num)
+                    if out is not None and out.exists() and out.stat().st_size > 0:
+                        out_path = out
+                        break
+                    print(
+                        f"[{alias}] photo retry {attempt}/{retries} failed dir={key.dir_num} media={key.media_num}"
+                    )
+                    if attempt < retries:
+                        time.sleep(0.6)
+                if out_path is None:
+                    raise RuntimeError(
+                        f"Photo download failed after {retries} attempts dir={key.dir_num} media={key.media_num}"
+                    )
             else:
                 out_path = Path(media_file_path(out_root, key.dir_num, key.media_num, key.file_type))
                 send_video_download_flow_item(session, key.dir_num, key.media_num, out_mp4_path=str(out_path))

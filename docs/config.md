@@ -14,6 +14,7 @@ See `config.example.yaml` (you can name your real file `config.yaml` or `config.
 - Select which camera to talk to via `--camera <alias>` (no `--ssid` / `--ble-address` CLI overrides).
 - Put default knobs under `client:` (wifi interface, UDP bind port, page sizes, timeouts).
   - Note: `client.page_no` is intentionally CLI-only; do not put it in config.yaml.
+  - `photo_download_retries` controls per-item retry count used by sync for flaky photo transfers.
 - Put output paths under `paths:`.
   - `staging_dir`: raw downloaded files (`/mnt/trailcam/staging` on `piiter`).
   - `final_media_dir`: final organized media root (for sync flow, e.g. `/mnt/trailcam/media`).
