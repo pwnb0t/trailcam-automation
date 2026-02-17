@@ -37,9 +37,14 @@ class ListMediaAllCommand(Command):
         max_pages = int(session.cfg.client.list_max_pages)
         debug = bool(session.cfg.debug)
 
+        print(
+            f"Listing media pages: item_cnt={item_cnt_per_page} max_pages={max_pages}"
+        )
         for page_no in range(0, max_pages):
+            print(f"  requesting page {page_no} ...", flush=True)
             page = fetch_media_list_page(session, page_no=page_no, item_cnt_per_page=item_cnt_per_page)
             if not page:
+                print(f"  page {page_no}: empty response; stopping")
                 break
 
             keys = {(e["dirNum"], e["mediaNum"], int(e.get("fileType", 0))) for e in page}
@@ -48,11 +53,13 @@ class ListMediaAllCommand(Command):
                 no_new_pages += 1
             else:
                 no_new_pages = 0
+            print(
+                f"  page {page_no}: entries={len(page)} new={len(new_keys)} "
+                f"repeat_pages={repeat_pages} no_new_pages={no_new_pages}",
+                flush=True,
+            )
             if debug:
-                print(
-                    f"Media list page {page_no}: entries={len(page)} new={len(new_keys)} "
-                    f"repeat_pages={repeat_pages} no_new_pages={no_new_pages}"
-                )
+                print(f"  page {page_no}: running_unique={len(seen) + len(new_keys)}")
 
             if last_page_keys is not None and keys == last_page_keys:
                 repeat_pages += 1
@@ -60,8 +67,10 @@ class ListMediaAllCommand(Command):
                 repeat_pages = 0
             last_page_keys = keys
             if repeat_pages >= 2:
+                print(f"  stopping: repeated page content detected ({repeat_pages} times)")
                 break
             if no_new_pages >= 2:
+                print(f"  stopping: no new entries for {no_new_pages} pages")
                 break
 
             for e in page:

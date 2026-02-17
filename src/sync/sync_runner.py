@@ -51,6 +51,10 @@ class SyncRunner:
         state = self.state_store.load()
         state["run_id_last"] = _run_id_now()
         cam_state = self.state_store.ensure_camera_state(state, alias)
+        if str(cam_state.get("status", "")).lower() == "done":
+            print(f"[{alias}] status=done in state file; skipping")
+            self.state_store.save(state)
+            return
         self.state_store.save(state)
         cfg = RunnerConfig(
             camera=cam,
