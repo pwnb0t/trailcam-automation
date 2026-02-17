@@ -11,11 +11,9 @@ class EmailNotifier:
     def __init__(self, cfg: EmailAlertsConfig):
         self.cfg = cfg
 
-    def enabled_for_failure(self) -> bool:
-        return bool(self.cfg.enabled) and ("failure" in {x.lower() for x in self.cfg.notify_on})
-
-    def send_failure(self, *, camera_alias: str, error: str, details: Optional[str] = None) -> None:
-        if not self.enabled_for_failure():
+    def send_message(self, *, subject: str, body: str) -> None:
+        if not self.cfg.enabled:
+            print("Email alerts disabled (alerts.email.enabled=false); skipping send")
             return
         if not self.cfg.to_emails:
             print("Email alerts enabled but alerts.email.to_emails is empty; skipping send")
@@ -25,15 +23,6 @@ class EmailNotifier:
             return
 
         from_email = self.cfg.from_email or self.cfg.smtp_user
-        subject = f"{self.cfg.subject_prefix} camera={camera_alias} status=FAILED"
-        body_lines = [
-            f"Camera: {camera_alias}",
-            f"Error: {error}",
-        ]
-        if details:
-            body_lines.extend(["", "Details:", details])
-        body = "\n".join(body_lines)
-
         msg = EmailMessage()
         msg["From"] = from_email
         msg["To"] = ", ".join(self.cfg.to_emails)
@@ -52,3 +41,18 @@ class EmailNotifier:
             smtp.login(self.cfg.smtp_user, self.cfg.smtp_app_password)
             smtp.send_message(msg)
 
+    def enabled_for_failure(self) -> bool:
+        return bool(self.cfg.enabled) and ("failure" in {x.lower() for x in self.cfg.notify_on})
+
+    def send_failure(self, *, camera_alias: str, error: str, details: Optional[str] = None) -> None:
+        if not self.enabled_for_failure():
+            return
+
+        subject = f"{self.cfg.subject_prefix} camera={camera_alias} status=FAILED"
+        body_lines = [
+            f"Camera: {camera_alias}",
+            f"Error: {error}",
+        ]
+        if details:
+            body_lines.extend(["", "Details:", details])
+        self.send_message(subject=subject, body="\n".join(body_lines))
