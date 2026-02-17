@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.config import load_config
+from src.notify.email_notifier import EmailNotifier
 from src.sync.sync_runner import SyncRunner
 from src.sync.sync_state import SyncStateStore
 
@@ -63,12 +64,14 @@ async def main() -> None:
     final_media_dir = Path(args.final_media_dir) if args.final_media_dir else Path(app_cfg.paths.final_media_dir or _default_final_media_dir())
     dupes_dir = Path(args.dupes_dir) if args.dupes_dir else _default_dupes_dir()
     state_store = SyncStateStore(Path(args.state_file))
+    notifier = EmailNotifier(app_cfg.alerts.email)
 
     runner = SyncRunner(
         app_cfg=app_cfg,
         state_store=state_store,
         final_media_dir=final_media_dir,
         dupes_dir=dupes_dir,
+        notifier=notifier,
         debug=bool(args.debug),
         dry_run=bool(args.dry_run),
     )
@@ -77,4 +80,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

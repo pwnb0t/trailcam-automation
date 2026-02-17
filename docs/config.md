@@ -19,6 +19,12 @@ See `config.example.yaml` (you can name your real file `config.yaml` or `config.
   - `staging_dir`: raw downloaded files (`/mnt/trailcam/staging` on `piiter`).
   - `final_media_dir`: final organized media root (for sync flow, e.g. `/mnt/trailcam/media`).
   - `tmp_dir`: temporary working files (`out/tmp` by default).
+- Optional failure email alerts under `alerts.email`:
+  - Set `enabled: true`
+  - Configure SMTP fields (`smtp_host`, `smtp_port`, `smtp_user`, `from_email`, `to_emails`)
+  - For Gmail app password, use env var reference:
+    - `smtp_app_password: "${TRAILCAM_GMAIL_APP_PASSWORD}"`
+  - Current behavior: sends on sync camera failures when `notify_on` includes `failure`.
 
 ## Notes
 

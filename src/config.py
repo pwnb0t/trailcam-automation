@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -37,12 +39,59 @@ def _must_float(v: Any, field: str) -> float:
         raise ValueError(f"{field} must be a float, got {v!r}") from e
 
 
+def _must_bool(v: Any, field: str) -> bool:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in ("1", "true", "yes", "on"):
+            return True
+        if s in ("0", "false", "no", "off"):
+            return False
+    raise ValueError(f"{field} must be a bool, got {v!r}")
+
+
+_ENV_REF_RE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
+
+
+def _expand_env_ref(v: Any, field: str) -> str:
+    s = str(v)
+    m = _ENV_REF_RE.match(s.strip())
+    if not m:
+        return s
+    env_name = m.group(1)
+    env_val = os.getenv(env_name)
+    if env_val is None:
+        raise ValueError(f"{field} references env var {env_name!r}, but it is not set")
+    return env_val
+
+
+@dataclass(frozen=True)
+class EmailAlertsConfig:
+    enabled: bool = False
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_app_password: str = ""
+    from_email: str = ""
+    to_emails: List[str] = field(default_factory=list)
+    subject_prefix: str = "[TrailCam Sync]"
+    starttls: bool = True
+    notify_on: List[str] = field(default_factory=lambda: ["failure"])
+
+
+@dataclass(frozen=True)
+class AlertsConfig:
+    email: EmailAlertsConfig = field(default_factory=EmailAlertsConfig)
+
+
 @dataclass(frozen=True)
 class AppConfig:
     version: int
     cameras: Dict[str, CameraConfig]
     client: ClientConfig
     paths: PathsConfig
+    alerts: AlertsConfig = field(default_factory=AlertsConfig)
 
     def get_camera(self, alias: str) -> CameraConfig:
         try:
@@ -164,7 +213,36 @@ def load_config(path: str | Path) -> AppConfig:
         final_media_dir=(str(paths_raw["final_media_dir"]) if "final_media_dir" in paths_raw else None),
     )
 
-    return AppConfig(version=ver, cameras=cams, client=c, paths=paths)
+    alerts_raw = raw.get("alerts") or {}
+    if alerts_raw and not isinstance(alerts_raw, dict):
+        raise ValueError("alerts must be a mapping")
+    email_raw = alerts_raw.get("email") or {}
+    if email_raw and not isinstance(email_raw, dict):
+        raise ValueError("alerts.email must be a mapping")
+
+    to_emails_raw = email_raw.get("to_emails", [])
+    if isinstance(to_emails_raw, str):
+        to_emails = [x.strip() for x in to_emails_raw.split(",") if x.strip()]
+    elif isinstance(to_emails_raw, list):
+        to_emails = [str(x).strip() for x in to_emails_raw if str(x).strip()]
+    else:
+        raise ValueError("alerts.email.to_emails must be a list or comma-separated string")
+
+    email_cfg = EmailAlertsConfig(
+        enabled=_must_bool(email_raw.get("enabled", False), "alerts.email.enabled"),
+        smtp_host=str(email_raw.get("smtp_host", "smtp.gmail.com")),
+        smtp_port=_must_int(email_raw.get("smtp_port", 587), "alerts.email.smtp_port"),
+        smtp_user=str(email_raw.get("smtp_user", "")),
+        smtp_app_password=_expand_env_ref(email_raw.get("smtp_app_password", ""), "alerts.email.smtp_app_password"),
+        from_email=str(email_raw.get("from_email", "")),
+        to_emails=to_emails,
+        subject_prefix=str(email_raw.get("subject_prefix", "[TrailCam Sync]")),
+        starttls=_must_bool(email_raw.get("starttls", True), "alerts.email.starttls"),
+        notify_on=[str(x).strip().lower() for x in email_raw.get("notify_on", ["failure"]) if str(x).strip()],
+    )
+    alerts_cfg = AlertsConfig(email=email_cfg)
+
+    return AppConfig(version=ver, cameras=cams, client=c, paths=paths, alerts=alerts_cfg)
 
 
 def _default_staging_dir() -> str:

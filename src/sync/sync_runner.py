@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -12,6 +13,7 @@ from src.command.path_utils import camera_media_root, media_file_path
 from src.config import AppConfig, ClientConfig, PathsConfig, RunnerConfig
 from src.connection.connection import connect_and_login
 from src.flows import download_photo_to_out_item, send_video_download_flow_item
+from src.notify.email_notifier import EmailNotifier
 from src.sync.manifest import build_staging_manifest, build_trailcam_manifest, compute_missing
 from src.sync.organize import organize_one
 from src.sync.sync_state import MediaKey, SyncStateStore
@@ -29,6 +31,7 @@ class SyncRunner:
         state_store: SyncStateStore,
         final_media_dir: Path,
         dupes_dir: Path,
+        notifier: Optional[EmailNotifier] = None,
         debug: bool = False,
         dry_run: bool = False,
     ):
@@ -36,6 +39,7 @@ class SyncRunner:
         self.state_store = state_store
         self.final_media_dir = Path(final_media_dir)
         self.dupes_dir = Path(dupes_dir)
+        self.notifier = notifier
         self.debug = bool(debug)
         self.dry_run = bool(dry_run)
 
@@ -46,6 +50,15 @@ class SyncRunner:
                 await self.run_camera(alias)
             except Exception as e:
                 print(f"[{alias}] failed: {e}")
+                if self.notifier is not None:
+                    try:
+                        self.notifier.send_failure(
+                            camera_alias=alias,
+                            error=str(e),
+                            details=traceback.format_exc(),
+                        )
+                    except Exception as notify_err:
+                        print(f"[{alias}] failure email send failed: {notify_err}")
 
     async def run_camera(self, alias: str) -> None:
         cam = self.app_cfg.get_camera(alias)
