@@ -100,11 +100,15 @@ def send_photo_download_flow(
                 return
 
     def req_resend_loop():
-        # App captures show an immediate double-send of cmdId=1285, then a later resend.
-        if stop_hb.wait(0.02):
+        # Safety resend only if transfer data has not started yet.
+        if stop_hb.wait(1.5):
+            return
+        if saw_download_data.is_set():
             return
         send_download_req()
-        if stop_hb.wait(7.5):
+        if stop_hb.wait(4.0):
+            return
+        if saw_download_data.is_set():
             return
         send_download_req()
 
@@ -147,6 +151,12 @@ def send_photo_download_flow(
     acked_seq0 = 0
     acked_seq3 = 0
     acked_seq4 = 0
+    dup_seq0 = 0
+    dup_seq0_changed = 0
+    dup_seq3 = 0
+    dup_seq3_changed = 0
+    dup_seq4 = 0
+    dup_seq4_changed = 0
 
     while time.time() < end:
         got = client.recv()
@@ -174,7 +184,15 @@ def send_photo_download_flow(
             client.send_f1(0xD1, make_ack_body_seq_list16(0x00, [seq0]))
             acked_seq0 += 1
             chunk = body[4:]
-            seq0_stream_chunks[seq0] = chunk
+            prev = seq0_stream_chunks.get(seq0)
+            if prev is not None:
+                dup_seq0 += 1
+                if prev != chunk:
+                    dup_seq0_changed += 1
+            else:
+                # Keep first-seen payload for a sequence number.
+                # Late duplicates can belong to stale/retransmitted traffic and corrupt assembly.
+                seq0_stream_chunks[seq0] = chunk
             for ver, typ, payload in parse_artemis_records(chunk):
                 if debug:
                     print(f"RX ARTEMIS ver={ver} typ={typ} len={len(payload)}")
@@ -190,7 +208,15 @@ def send_photo_download_flow(
             # App mostly sends 17-seq ACK windows on channel 0x03.
             client.send_f1(0xD1, make_ack_body_seq_window16(0x03, list(ack_win_seq3)))
             acked_seq3 += 1
-            seq3_stream_chunks[seq16] = body[4:]
+            chunk = body[4:]
+            prev = seq3_stream_chunks.get(seq16)
+            if prev is not None:
+                dup_seq3 += 1
+                if prev != chunk:
+                    dup_seq3_changed += 1
+            else:
+                # Keep first-seen payload for a sequence number.
+                seq3_stream_chunks[seq16] = chunk
             last_seq3_ts = time.time()
             continue
 
@@ -201,7 +227,15 @@ def send_photo_download_flow(
             # App mostly sends 17-seq ACK windows on channel 0x04.
             client.send_f1(0xD1, make_ack_body_seq_window16(0x04, list(ack_win_seq4)))
             acked_seq4 += 1
-            seq4_stream_chunks[seq16] = body[4:]
+            chunk = body[4:]
+            prev = seq4_stream_chunks.get(seq16)
+            if prev is not None:
+                dup_seq4 += 1
+                if prev != chunk:
+                    dup_seq4_changed += 1
+            else:
+                # Keep first-seen payload for a sequence number.
+                seq4_stream_chunks[seq16] = chunk
             last_seq4_ts = time.time()
             continue
 
@@ -226,6 +260,13 @@ def send_photo_download_flow(
         f"seq4_chunks={len(seq4_stream_chunks)} acked_seq4={acked_seq4} "
         f"hb_sent={hb_sent} req1285_sent={dl_req_sent}"
     )
+    if debug:
+        print(
+            "Seq dupes changed: "
+            f"seq0={dup_seq0}/{dup_seq0_changed} "
+            f"seq3={dup_seq3}/{dup_seq3_changed} "
+            f"seq4={dup_seq4}/{dup_seq4_changed}"
+        )
 
     assembled0 = b"".join(seq0_stream_chunks[k] for k in sorted(seq0_stream_chunks))
     (out_dir / "seq0_assembled.bin").write_bytes(assembled0)
