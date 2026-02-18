@@ -149,6 +149,8 @@ def send_photo_download_flow(
     seq4_stream_chunks: Dict[int, bytes] = {}
     ack_win_seq3 = deque(maxlen=17)  # holds seq16 values
     ack_win_seq4 = deque(maxlen=17)  # holds seq16 values
+    ack_pending_seq3 = 0
+    ack_pending_seq4 = 0
     acked_seq0 = 0
     acked_seq3 = 0
     acked_seq4 = 0
@@ -206,9 +208,13 @@ def send_photo_download_flow(
             saw_download_data.set()
             seq16 = (body[2] << 8) | body[3]
             ack_win_seq3.append(seq16)
-            # App mostly sends 17-seq ACK windows on channel 0x03.
-            client.send_f1(0xD1, make_ack_body_seq_window16(0x03, list(ack_win_seq3)))
-            acked_seq3 += 1
+            ack_pending_seq3 += 1
+            # App does not ACK every chunk; it tends to ACK roughly once per ~10 chunks.
+            # This reduces uplink pressure on small devices and matches capture behavior.
+            if acked_seq3 < 3 or ack_pending_seq3 >= 10:
+                client.send_f1(0xD1, make_ack_body_seq_window16(0x03, list(ack_win_seq3)))
+                acked_seq3 += 1
+                ack_pending_seq3 = 0
             chunk = body[4:]
             prev = seq3_stream_chunks.get(seq16)
             if prev is not None:
@@ -225,9 +231,12 @@ def send_photo_download_flow(
             saw_download_data.set()
             seq16 = (body[2] << 8) | body[3]
             ack_win_seq4.append(seq16)
-            # App mostly sends 17-seq ACK windows on channel 0x04.
-            client.send_f1(0xD1, make_ack_body_seq_window16(0x04, list(ack_win_seq4)))
-            acked_seq4 += 1
+            ack_pending_seq4 += 1
+            # App does not ACK every chunk; it tends to ACK roughly once per ~10 chunks.
+            if acked_seq4 < 3 or ack_pending_seq4 >= 10:
+                client.send_f1(0xD1, make_ack_body_seq_window16(0x04, list(ack_win_seq4)))
+                acked_seq4 += 1
+                ack_pending_seq4 = 0
             chunk = body[4:]
             prev = seq4_stream_chunks.get(seq16)
             if prev is not None:
@@ -254,6 +263,12 @@ def send_photo_download_flow(
                 break
 
     stop_hb.set()
+    if ack_pending_seq3 and ack_win_seq3:
+        client.send_f1(0xD1, make_ack_body_seq_window16(0x03, list(ack_win_seq3)))
+        acked_seq3 += 1
+    if ack_pending_seq4 and ack_win_seq4:
+        client.send_f1(0xD1, make_ack_body_seq_window16(0x04, list(ack_win_seq4)))
+        acked_seq4 += 1
 
     print(
         f"Download listen complete: seq0_chunks={len(seq0_stream_chunks)} acked_seq0={acked_seq0} "
@@ -532,7 +547,8 @@ def send_video_download_flow_item(
     drained_packets = drain_inbound()
     if debug and drained_packets:
         print(f"Drained stale UDP packets before start: {drained_packets}")
-    client.send_cmd_json(start_req, art_ver=2, art_typ=2)
+    # App captures for start/stop playback use ARTEMIS type 15/16.
+    client.send_cmd_json(start_req, art_ver=2, art_typ=15)
     t_hb = threading.Thread(target=hb_loop, daemon=True)
     t_hb.start()
 
@@ -541,6 +557,7 @@ def send_video_download_flow_item(
     chunks02: Dict[int, bytes] = {}
     # App captures use ~17 sequence ACK windows on subtype 0x02.
     ack_win = deque(maxlen=17)
+    ack_pending = 0
     last_data_ts: Optional[float] = None
     end = time.time() + listen_s
 
@@ -591,7 +608,11 @@ def send_video_download_flow_item(
                             chunks02[seq16] = chunk
                         last_data_ts = time.time()
                         ack_win.append(seq16)
-                        client.send_f1(0xD1, make_ack_body_seq_window16(0x02, list(ack_win)))
+                        ack_pending += 1
+                        # App ACK cadence is roughly one ACK per ~10 data packets for subtype 0x02.
+                        if len(ack_win) <= 3 or ack_pending >= 10:
+                            client.send_f1(0xD1, make_ack_body_seq_window16(0x02, list(ack_win)))
+                            ack_pending = 0
                         continue
 
                 # Control plane JSON
@@ -793,9 +814,14 @@ def send_video_download_flow_item(
                 print(f"Wrote debug dump: {dbg_dir}")
 
         finally:
+            if ack_pending and ack_win:
+                try:
+                    client.send_f1(0xD1, make_ack_body_seq_window16(0x02, list(ack_win)))
+                except Exception:
+                    pass
             # Stop playback and heartbeats.
             try:
-                client.send_cmd_json(stop_req, art_ver=2, art_typ=2)
+                client.send_cmd_json(stop_req, art_ver=2, art_typ=16)
             except Exception:
                 pass
             stop_hb.set()
