@@ -554,6 +554,7 @@ def send_video_download_flow_item(
 
     # Collect JSON response (start play ack) and subtype stream chunks.
     start_play_info: Dict[str, Any] = {}
+    start_play_info_seen = False
     chunks02: Dict[int, bytes] = {}
     # App captures use ~17 sequence ACK windows on subtype 0x02.
     ack_win = deque(maxlen=17)
@@ -593,6 +594,24 @@ def send_video_download_flow_item(
                         client.send_f1(0xE1, b"")
                         continue
 
+                    # Control JSON/data channel carried on subtype 0x00.
+                    if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x00:
+                        seq0 = (body[2] << 8) | body[3]
+                        client.send_f1(0xD1, make_ack_body_seq_list16(0x00, [seq0]))
+                        chunk0 = body[4:]
+                        for ver, typ, payload in parse_artemis_records(chunk0):
+                            obj = decrypt_payload_b64_bytes(payload)
+                            if not obj:
+                                continue
+                            if debug:
+                                print("RX JSON:", obj)
+                            if not start_play_info_seen and (
+                                obj.get("cmdId") == 769 or "startPbRet" in obj
+                            ):
+                                start_play_info = obj
+                                start_play_info_seen = True
+                        continue
+
                     # Data channel: D0 subtype 0x02
                     if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x02:
                         seq16 = (body[2] << 8) | body[3]
@@ -619,8 +638,9 @@ def send_video_download_flow_item(
                 for obj in client.handle_incoming_payload(data):
                     if debug:
                         print("RX JSON:", obj)
-                    if obj.get("cmdId") == 769 or "startPbRet" in obj:
+                    if not start_play_info_seen and (obj.get("cmdId") == 769 or "startPbRet" in obj):
                         start_play_info = obj
+                        start_play_info_seen = True
 
             if not chunks02:
                 raise RuntimeError("No D0 subtype=0x02 chunks captured for video stream")
