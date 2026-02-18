@@ -16,6 +16,7 @@ from src.protocol import (
     decrypt_v4_media_data_pages,
     make_ack_body_seq_list16,
     make_ack_body_seq_window16,
+    normalize_v4_video_payload_to_annexb,
     parse_artemis_records,
     parse_artemis_records_strict,
     unpack_f1,
@@ -555,10 +556,10 @@ def send_video_download_flow_item(
                 raise RuntimeError("No ARTEMIS records found in subtype=0x02 assembled stream")
 
             # Decode + decrypt ver=4 payload data.
-            v_items: List[tuple[int, bytes, int]] = []
-            a_items: List[tuple[int, bytes, int]] = []
+            v_items: List[tuple[int, bytes, int, int]] = []
+            a_items: List[tuple[int, bytes, int, int]] = []
             session_counts: Dict[int, int] = {}
-            for ver, _typ, payload in records:
+            for rec_idx, (ver, _typ, payload) in enumerate(records):
                 if ver != 4:
                     continue
                 hdr = _parse_artemis_v4_payload_header(payload)
@@ -575,10 +576,11 @@ def send_video_download_flow_item(
                 # - video-like: width/height set and data_len_off=16
                 # - audio-like: width/height 0 and data_len_off=20
                 if hdr["data_len_off"] == 16 and hdr["width"] and hdr["height"]:
-                    v_items.append((int(hdr["pts_ms"]), dec, sess))
+                    v_payload = normalize_v4_video_payload_to_annexb(dec)
+                    v_items.append((int(hdr["pts_ms"]), v_payload, sess, rec_idx))
                     v_cnt += 1
                 elif hdr["data_len_off"] == 20 and hdr["width"] == 0 and hdr["height"] == 0:
-                    a_items.append((int(hdr["pts_ms"]), dec, sess))
+                    a_items.append((int(hdr["pts_ms"]), dec, sess, rec_idx))
                     a_cnt += 1
 
             target_session_no = session_no
@@ -602,14 +604,42 @@ def send_video_download_flow_item(
                 if cur[0] < prev[0]:
                     pts_backwards_audio += 1
 
-            v_items_sess.sort(key=lambda x: (x[0],))
-            a_items_sess.sort(key=lambda x: (x[0],))
+            v_items_sess.sort(key=lambda x: (x[0], x[3]))
+            a_items_sess.sort(key=lambda x: (x[0], x[3]))
+
+            # Duplicate PTS records can appear (e.g. retransmit artifacts). Keep the largest payload
+            # for a given PTS to avoid concatenating repeated/corrupt access units.
+            dedup_video_pts = 0
+            dedup_audio_pts = 0
+            v_by_pts: Dict[int, tuple[int, bytes, int, int]] = {}
+            for item in v_items_sess:
+                pts = item[0]
+                prev = v_by_pts.get(pts)
+                if prev is None or len(item[1]) > len(prev[1]):
+                    if prev is not None:
+                        dedup_video_pts += 1
+                    v_by_pts[pts] = item
+                else:
+                    dedup_video_pts += 1
+            a_by_pts: Dict[int, tuple[int, bytes, int, int]] = {}
+            for item in a_items_sess:
+                pts = item[0]
+                prev = a_by_pts.get(pts)
+                if prev is None or len(item[1]) > len(prev[1]):
+                    if prev is not None:
+                        dedup_audio_pts += 1
+                    a_by_pts[pts] = item
+                else:
+                    dedup_audio_pts += 1
+
+            v_items_sess = [v_by_pts[k] for k in sorted(v_by_pts)]
+            a_items_sess = [a_by_pts[k] for k in sorted(a_by_pts)]
 
             v_h264 = bytearray()
-            for _, dec, _ in v_items_sess:
+            for _, dec, _, _ in v_items_sess:
                 v_h264 += dec
             a_aac = bytearray()
-            for _, dec, _ in a_items_sess:
+            for _, dec, _, _ in a_items_sess:
                 a_aac += dec
 
             if debug:
@@ -623,7 +653,8 @@ def send_video_download_flow_item(
                 print(
                     f"seq dupes={duplicate_seq} changed={duplicate_seq_changed} "
                     f"out_of_session={out_of_session_records} "
-                    f"pts_backwards(video/audio)={pts_backwards_video}/{pts_backwards_audio}"
+                    f"pts_backwards(video/audio)={pts_backwards_video}/{pts_backwards_audio} "
+                    f"dedup_pts(video/audio)={dedup_video_pts}/{dedup_audio_pts}"
                 )
 
             if not v_h264:

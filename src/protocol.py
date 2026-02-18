@@ -1,6 +1,7 @@
 import base64
 import json
 import struct
+from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
 from cryptography.hazmat.backends import default_backend
@@ -253,3 +254,78 @@ def decrypt_v4_media_data_pages(data: bytes) -> bytes:
         pt = dec.update(ct) + dec.finalize()
         out[off : off + len(pt)] = pt
     return bytes(out)
+
+
+def _looks_like_h264_nal_hdr(b0: int) -> bool:
+    if b0 & 0x80:
+        return False
+    nal_type = b0 & 0x1F
+    return nal_type in {1, 5, 6, 7, 8, 9, 10, 11, 12}
+
+
+def _find_first_h264_start(blob: bytes) -> int:
+    i = blob.find(b"\x00\x00\x00\x01")
+    if i != -1:
+        return i
+    return blob.find(b"\x00\x00\x01")
+
+
+def len16_be_nals_to_annexb_best_effort(
+    data: bytes,
+    start_scan_max: int = 32,
+    min_coverage_ratio: float = 0.20,
+) -> Tuple[bytes, Counter[int], int, int]:
+    """Decode a bytestream of (len16be + nal) units into Annex-B.
+
+    Returns: (annexb_bytes, nal_type_counts, units, start_offset). If decoding fails,
+    annexb_bytes is empty and start_offset is -1.
+    """
+
+    def decode_from(start: int) -> Tuple[bytes, Counter[int], int, int]:
+        i = start
+        out = bytearray()
+        c: Counter[int] = Counter()
+        units = 0
+        consumed = 0
+        while i + 3 <= len(data):
+            ln = int.from_bytes(data[i : i + 2], "big")
+            if ln <= 0 or i + 2 + ln > len(data):
+                break
+            b0 = data[i + 2]
+            if not _looks_like_h264_nal_hdr(b0):
+                break
+            out += b"\x00\x00\x00\x01"
+            out += data[i + 2 : i + 2 + ln]
+            c[b0 & 0x1F] += 1
+            units += 1
+            i += 2 + ln
+            consumed = i - start
+        return bytes(out), c, units, consumed
+
+    best: Optional[Tuple[int, bytes, Counter[int], int, int]] = None
+    for start in range(0, min(start_scan_max, len(data)) + 1):
+        out, c, units, consumed = decode_from(start)
+        if units <= 0:
+            continue
+        if consumed < int(len(data) * min_coverage_ratio):
+            continue
+        score = consumed
+        if best is None or score > best[0]:
+            best = (score, out, c, units, start)
+
+    if best is None:
+        return b"", Counter(), 0, -1
+    return best[1], best[2], best[3], best[4]
+
+
+def normalize_v4_video_payload_to_annexb(data: bytes) -> bytes:
+    """Normalize decrypted ver=4 video payload bytes into Annex-B H264 bytes."""
+    if not data:
+        return data
+    i = _find_first_h264_start(data)
+    if i != -1:
+        return data[i:]
+    annexb, _counts, units, _start = len16_be_nals_to_annexb_best_effort(data, start_scan_max=64, min_coverage_ratio=0.30)
+    if units > 0 and annexb:
+        return annexb
+    return data
