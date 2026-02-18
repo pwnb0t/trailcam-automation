@@ -462,6 +462,12 @@ def _parse_artemis_v4_payload_header(payload: bytes) -> Optional[Dict[str, int]]
     }
 
 
+def _is_sentinel_video_frame(data: bytes) -> bool:
+    # Decompiled app explicitly ignores a synthetic marker frame:
+    # 00 00 00 01 01
+    return len(data) >= 5 and data[:5] == b"\x00\x00\x00\x01\x01"
+
+
 def send_video_download_flow_item(
     session: TrailCamSession,
     dir_num: int,
@@ -571,6 +577,7 @@ def send_video_download_flow_item(
 
         v_cnt = 0
         a_cnt = 0
+        dropped_sentinel_video = 0
         v4_rows: List[Dict[str, int]] = []
         v_mode_counts: Dict[str, int] = {"annexb": 0, "len16": 0, "raw": 0}
         try:
@@ -682,7 +689,13 @@ def send_video_download_flow_item(
                 # - video-like: width/height set and data_len_off=16
                 # - audio-like: width/height 0 and data_len_off=20
                 if hdr["data_len_off"] == 16 and hdr["width"] and hdr["height"]:
+                    if _is_sentinel_video_frame(dec):
+                        dropped_sentinel_video += 1
+                        continue
                     v_payload, mode = normalize_v4_video_payload_to_annexb_with_mode(dec)
+                    if _is_sentinel_video_frame(v_payload):
+                        dropped_sentinel_video += 1
+                        continue
                     v_mode_counts[mode] = v_mode_counts.get(mode, 0) + 1
                     v_items.append((int(hdr["pts_ms"]), v_payload, sess, rec_idx))
                     v_cnt += 1
@@ -763,6 +776,7 @@ def send_video_download_flow_item(
                     f"seq dupes={duplicate_seq} changed={duplicate_seq_changed} "
                     f"seq_range={seq_keys[0] if seq_keys else -1}-{seq_keys[-1] if seq_keys else -1} "
                     f"seq_missing={missing_seq} "
+                    f"dropped_sentinel_video={dropped_sentinel_video} "
                     f"out_of_session={out_of_session_records} "
                     f"pts_backwards(video/audio)={pts_backwards_video}/{pts_backwards_audio} "
                     f"dedup_pts(video/audio)={dedup_video_pts}/{dedup_audio_pts} "
