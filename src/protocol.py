@@ -33,8 +33,18 @@ def make_ack_body_seq_list16(subtype: int, seqs16: List[int]) -> bytes:
 
 
 def make_ack_body_seq_window16(subtype: int, seqs16_ordered: List[int]) -> bytes:
-    count = min(len(seqs16_ordered), 0xFF)
-    seq16 = b"".join(struct.pack(">H", s & 0xFFFF) for s in seqs16_ordered[-count:])
+    # Keep last-seen unique sequence numbers while preserving order.
+    uniq_rev: List[int] = []
+    seen = set()
+    for s in reversed(seqs16_ordered):
+        s16 = int(s) & 0xFFFF
+        if s16 in seen:
+            continue
+        seen.add(s16)
+        uniq_rev.append(s16)
+    seqs = list(reversed(uniq_rev))
+    count = min(len(seqs), 0xFF)
+    seq16 = b"".join(struct.pack(">H", s & 0xFFFF) for s in seqs[-count:])
     return bytes([0xD1, subtype & 0xFF, 0x00, count]) + seq16
 
 
@@ -318,14 +328,30 @@ def len16_be_nals_to_annexb_best_effort(
     return best[1], best[2], best[3], best[4]
 
 
-def normalize_v4_video_payload_to_annexb(data: bytes) -> bytes:
-    """Normalize decrypted ver=4 video payload bytes into Annex-B H264 bytes."""
+def normalize_v4_video_payload_to_annexb_with_mode(data: bytes) -> Tuple[bytes, str]:
+    """Normalize decrypted ver=4 video payload bytes into Annex-B H264 bytes.
+
+    Returns (normalized_bytes, mode) where mode is one of:
+    - 'annexb' (already had start codes)
+    - 'len16'  (decoded from len16-be + nal framing)
+    - 'raw'    (fallback, unchanged)
+    """
     if not data:
-        return data
+        return data, "raw"
     i = _find_first_h264_start(data)
     if i != -1:
-        return data[i:]
+        # For live video streams, record payloads can include continuation bytes before the
+        # next start code. Trimming to first start code can discard needed tail bytes from the
+        # previous access unit and cause decode artifacts. Only trim tiny alignment prefixes.
+        if i <= 4:
+            return data[i:], "annexb"
+        return data, "annexb"
     annexb, _counts, units, _start = len16_be_nals_to_annexb_best_effort(data, start_scan_max=64, min_coverage_ratio=0.30)
     if units > 0 and annexb:
-        return annexb
-    return data
+        return annexb, "len16"
+    return data, "raw"
+
+
+def normalize_v4_video_payload_to_annexb(data: bytes) -> bytes:
+    out, _mode = normalize_v4_video_payload_to_annexb_with_mode(data)
+    return out

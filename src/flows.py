@@ -1,3 +1,4 @@
+import csv
 import os
 import subprocess
 import threading
@@ -16,7 +17,7 @@ from src.protocol import (
     decrypt_v4_media_data_pages,
     make_ack_body_seq_list16,
     make_ack_body_seq_window16,
-    normalize_v4_video_payload_to_annexb,
+    normalize_v4_video_payload_to_annexb_with_mode,
     parse_artemis_records,
     parse_artemis_records_strict,
     unpack_f1,
@@ -511,14 +512,19 @@ def send_video_download_flow_item(
 
     def hb_loop():
         nonlocal hb_sent
+        # Mirror app behavior more closely: send cmdId=525 in short bursts every ~3s.
         typ = 0x00010001
         while not stop_hb.is_set():
-            client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
-            hb_sent += 1
-            typ += 1
-            if typ > 0x00010004:
-                typ = 0x00010001
-            stop_hb.wait(0.7)
+            for _ in range(10):
+                client.send_cmd_json({"cmdId": 525}, art_ver=2, art_typ=typ)
+                hb_sent += 1
+                typ += 1
+                if typ > 0x00010004:
+                    typ = 0x00010001
+                if stop_hb.wait(0.012):
+                    return
+            if stop_hb.wait(3.0):
+                return
 
     print(
         f"TX JSON: start play record cmdId=769 fileType={file_type} dirNum={dir_num} mediaNum={media_num} sessionNo={session_no}"
@@ -533,7 +539,8 @@ def send_video_download_flow_item(
     # Collect JSON response (start play ack) and subtype stream chunks.
     start_play_info: Dict[str, Any] = {}
     chunks02: Dict[int, bytes] = {}
-    ack_win = deque(maxlen=33)
+    # App captures use ~17 sequence ACK windows on subtype 0x02.
+    ack_win = deque(maxlen=17)
     last_data_ts: Optional[float] = None
     end = time.time() + listen_s
 
@@ -541,9 +548,13 @@ def send_video_download_flow_item(
         tmp_root = Path(tmp_dir)
         tmp_h264 = tmp_root / "video.h264"
         tmp_aac = tmp_root / "audio.aac"
+        tmp_assembled = tmp_root / "subtype_02_assembled.bin"
+        tmp_records_csv = tmp_root / "v4_records.csv"
 
         v_cnt = 0
         a_cnt = 0
+        v4_rows: List[Dict[str, int]] = []
+        v_mode_counts: Dict[str, int] = {"annexb": 0, "len16": 0, "raw": 0}
         try:
             while time.time() < end:
                 got = client.recv()
@@ -574,8 +585,10 @@ def send_video_download_flow_item(
                             duplicate_seq += 1
                             if prev != chunk:
                                 duplicate_seq_changed += 1
-                        # Keep latest chunk for this seq; helps if stale/older packet arrived first.
-                        chunks02[seq16] = chunk
+                        if prev is None:
+                            # Keep first-seen payload for this seq to avoid late retransmits
+                            # replacing already-accepted content.
+                            chunks02[seq16] = chunk
                         last_data_ts = time.time()
                         ack_win.append(seq16)
                         client.send_f1(0xD1, make_ack_body_seq_window16(0x02, list(ack_win)))
@@ -612,12 +625,24 @@ def send_video_download_flow_item(
                 dec = decrypt_v4_media_data_pages(raw)
                 sess = int(hdr["session_no"])
                 session_counts[sess] = session_counts.get(sess, 0) + 1
+                v4_rows.append(
+                    {
+                        "record_idx": int(rec_idx),
+                        "pts_ms": int(hdr["pts_ms"]),
+                        "data_len": int(hdr["data_len"]),
+                        "data_len_off": int(hdr["data_len_off"]),
+                        "width": int(hdr["width"]),
+                        "height": int(hdr["height"]),
+                        "session_no": int(sess),
+                    }
+                )
 
                 # Heuristic classification:
                 # - video-like: width/height set and data_len_off=16
                 # - audio-like: width/height 0 and data_len_off=20
                 if hdr["data_len_off"] == 16 and hdr["width"] and hdr["height"]:
-                    v_payload = normalize_v4_video_payload_to_annexb(dec)
+                    v_payload, mode = normalize_v4_video_payload_to_annexb_with_mode(dec)
+                    v_mode_counts[mode] = v_mode_counts.get(mode, 0) + 1
                     v_items.append((int(hdr["pts_ms"]), v_payload, sess, rec_idx))
                     v_cnt += 1
                 elif hdr["data_len_off"] == 20 and hdr["width"] == 0 and hdr["height"] == 0:
@@ -645,20 +670,20 @@ def send_video_download_flow_item(
                 if cur[0] < prev[0]:
                     pts_backwards_audio += 1
 
-            v_items_sess.sort(key=lambda x: (x[0], x[3]))
-            a_items_sess.sort(key=lambda x: (x[0], x[3]))
+            # Preserve capture/record order; this matches how the extractor tool reconstructs
+            # streams from PCAP and avoids reordering access units by PTS.
+            v_items_sess.sort(key=lambda x: x[3])
+            a_items_sess.sort(key=lambda x: x[3])
 
-            # Duplicate PTS records can appear (e.g. retransmit artifacts). Keep the largest payload
-            # for a given PTS to avoid concatenating repeated/corrupt access units.
+            # Duplicate PTS records can appear. Keep first-in-record-order to avoid mutating stream
+            # chronology while still collapsing exact retransmit artifacts.
             dedup_video_pts = 0
             dedup_audio_pts = 0
             v_by_pts: Dict[int, tuple[int, bytes, int, int]] = {}
             for item in v_items_sess:
                 pts = item[0]
                 prev = v_by_pts.get(pts)
-                if prev is None or len(item[1]) > len(prev[1]):
-                    if prev is not None:
-                        dedup_video_pts += 1
+                if prev is None:
                     v_by_pts[pts] = item
                 else:
                     dedup_video_pts += 1
@@ -666,15 +691,12 @@ def send_video_download_flow_item(
             for item in a_items_sess:
                 pts = item[0]
                 prev = a_by_pts.get(pts)
-                if prev is None or len(item[1]) > len(prev[1]):
-                    if prev is not None:
-                        dedup_audio_pts += 1
+                if prev is None:
                     a_by_pts[pts] = item
                 else:
                     dedup_audio_pts += 1
-
-            v_items_sess = [v_by_pts[k] for k in sorted(v_by_pts)]
-            a_items_sess = [a_by_pts[k] for k in sorted(a_by_pts)]
+            v_items_sess = sorted(v_by_pts.values(), key=lambda x: x[3])
+            a_items_sess = sorted(a_by_pts.values(), key=lambda x: x[3])
 
             v_h264 = bytearray()
             for _, dec, _, _ in v_items_sess:
@@ -685,6 +707,11 @@ def send_video_download_flow_item(
 
             if debug:
                 print(f"Start play info: {start_play_info}")
+            seq_keys = sorted(chunks02)
+            missing_seq = 0
+            if seq_keys:
+                expected = seq_keys[-1] - seq_keys[0] + 1
+                missing_seq = expected - len(seq_keys)
             print(f"Captured subtype_02 chunks={len(chunks02)} bytes={len(assembled)}")
             print(
                 f"Parsed ver=4 records: video={v_cnt} audio={a_cnt} "
@@ -693,9 +720,12 @@ def send_video_download_flow_item(
             if debug:
                 print(
                     f"seq dupes={duplicate_seq} changed={duplicate_seq_changed} "
+                    f"seq_range={seq_keys[0] if seq_keys else -1}-{seq_keys[-1] if seq_keys else -1} "
+                    f"seq_missing={missing_seq} "
                     f"out_of_session={out_of_session_records} "
                     f"pts_backwards(video/audio)={pts_backwards_video}/{pts_backwards_audio} "
-                    f"dedup_pts(video/audio)={dedup_video_pts}/{dedup_audio_pts}"
+                    f"dedup_pts(video/audio)={dedup_video_pts}/{dedup_audio_pts} "
+                    f"v_modes={v_mode_counts}"
                 )
 
             if not v_h264:
@@ -705,6 +735,23 @@ def send_video_download_flow_item(
 
             tmp_h264.write_bytes(bytes(v_h264))
             tmp_aac.write_bytes(bytes(a_aac))
+            tmp_assembled.write_bytes(assembled)
+            if v4_rows:
+                with tmp_records_csv.open("w", newline="") as f:
+                    w = csv.DictWriter(
+                        f,
+                        fieldnames=[
+                            "record_idx",
+                            "pts_ms",
+                            "data_len",
+                            "data_len_off",
+                            "width",
+                            "height",
+                            "session_no",
+                        ],
+                    )
+                    w.writeheader()
+                    w.writerows(v4_rows)
 
             if subprocess.run(["ffmpeg", "-version"], capture_output=True).returncode != 0:
                 raise RuntimeError("ffmpeg not available on PATH, cannot mux video")
@@ -735,6 +782,15 @@ def send_video_download_flow_item(
 
             out_mp4.write_bytes(mp4_tmp.read_bytes())
             print(f"Wrote MP4: {out_mp4} ({out_mp4.stat().st_size} bytes)")
+            if debug:
+                dbg_dir = out_mp4.parent / f"{out_mp4.stem}.debug"
+                dbg_dir.mkdir(parents=True, exist_ok=True)
+                (dbg_dir / "subtype_02_assembled.bin").write_bytes(tmp_assembled.read_bytes())
+                (dbg_dir / "video.h264").write_bytes(tmp_h264.read_bytes())
+                (dbg_dir / "audio.aac").write_bytes(tmp_aac.read_bytes())
+                if tmp_records_csv.exists():
+                    (dbg_dir / "v4_records.csv").write_bytes(tmp_records_csv.read_bytes())
+                print(f"Wrote debug dump: {dbg_dir}")
 
         finally:
             # Stop playback and heartbeats.
