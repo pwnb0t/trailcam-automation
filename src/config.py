@@ -148,6 +148,7 @@ class RunnerConfig:
     dir_num: Optional[int] = None
     media_num: Optional[int] = None
     video_out: str = ""
+    force_video_as_download: bool = False
     debug: bool = False
 
 
@@ -306,6 +307,11 @@ def _build_help_only_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tmp-dir", default="out/tmp")
     parser.add_argument("--dir-num", type=int, default=DEFAULT_DIR_NUM)
     parser.add_argument("--video-out", default="")
+    parser.add_argument(
+        "--force-video-as-download",
+        action="store_true",
+        help="Use cmdId=1285 flow for videos (diagnostic mode; does not use playback cmdId=769)",
+    )
     return parser
 
 
@@ -377,6 +383,11 @@ def _build_parser(
 
     parser.add_argument("--dir-num", type=int, default=DEFAULT_DIR_NUM, help="Media directory number (default: %(default)s)")
     parser.add_argument("--video-out", default="", help="Explicit output MP4 path for --download-single (when item is a video)")
+    parser.add_argument(
+        "--force-video-as-download",
+        action="store_true",
+        help="Use cmdId=1285 flow for videos (diagnostic mode; does not use playback cmdId=769)",
+    )
 
     return parser
 
@@ -501,5 +512,6 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
         dir_num=int(args.dir_num),
         media_num=(int(args.download_single) if args.download_single is not None else None),
         video_out=str(args.video_out or ""),
+        force_video_as_download=bool(args.force_video_as_download),
         debug=bool(args.debug),
     )

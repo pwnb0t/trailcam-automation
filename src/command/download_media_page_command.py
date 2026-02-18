@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from src.flows import (
+    download_via_1285_item,
     download_photo_to_out_item,
     fetch_media_list_page,
     send_video_download_flow_item,
@@ -65,16 +66,27 @@ class DownloadMediaPageCommand(Command):
         for idx, entry in enumerate(videos, start=1):
             dir_num = int(entry["dirNum"])
             media_num = int(entry["mediaNum"])
-            out_mp4 = media_file_path(out_root, dir_num, media_num, file_type=1)
             print(f"[video {idx}/{len(videos)}] dir={dir_num} media={media_num}")
-            send_video_download_flow_item(s, dir_num, media_num, out_mp4_path=str(out_mp4))
-            results.append(
-                {
-                    "kind": "video",
-                    "dirNum": dir_num,
-                    "mediaNum": media_num,
-                    "path": str(out_mp4),
-                }
-            )
+            if bool(s.cfg.force_video_as_download):
+                res = download_via_1285_item(s, dir_num, media_num, file_type=1)
+                results.append(
+                    {
+                        "kind": "video_cmd1285",
+                        "dirNum": dir_num,
+                        "mediaNum": media_num,
+                        "path": str(res.get("dump_dir") or ""),
+                    }
+                )
+            else:
+                out_mp4 = media_file_path(out_root, dir_num, media_num, file_type=1)
+                send_video_download_flow_item(s, dir_num, media_num, out_mp4_path=str(out_mp4))
+                results.append(
+                    {
+                        "kind": "video",
+                        "dirNum": dir_num,
+                        "mediaNum": media_num,
+                        "path": str(out_mp4),
+                    }
+                )
 
         return results

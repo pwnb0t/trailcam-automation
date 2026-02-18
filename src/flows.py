@@ -413,6 +413,17 @@ def download_photo_to_out_item(session: TrailCamSession, dir_num: int, media_num
         return out_path
 
 
+def download_via_1285_item(session: TrailCamSession, dir_num: int, media_num: int, file_type: int) -> Dict[str, Any]:
+    """Run cmdId=1285 flow for a specific media item and persist raw dump artifacts."""
+    dump_root = Path(str(session.cfg.paths.tmp_dir)) / "cmd1285_dumps" / str(session.cfg.camera.alias)
+    dump_root.mkdir(parents=True, exist_ok=True)
+    dump_dir = dump_root / f"dir{int(dir_num):03d}_media{int(media_num):04d}_ft{int(file_type)}_{int(time.time())}"
+    dump_dir.mkdir(parents=True, exist_ok=True)
+    res = send_photo_download_flow(session, int(dir_num), int(media_num), dump_dir=str(dump_dir), file_type=int(file_type))
+    res["dump_dir"] = str(dump_dir)
+    return res
+
+
 def download_photo_to_out(session: TrailCamSession) -> Optional[Path]:
     """Download the session's target photo and write it to the stable output layout."""
     if session.cfg.dir_num is None or session.cfg.media_num is None:

@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from src.command.command import Command, CommandError
 from src.command.path_utils import camera_media_root, media_file_path
 from src.flows import (
+    download_via_1285_item,
     fetch_media_list_page,
     download_photo_to_out_item,
     send_video_download_flow_item,
@@ -63,6 +64,14 @@ class DownloadSingleCommand(Command):
             return {"kind": "photo", "dirNum": dir_num, "mediaNum": media_num, "path": str(out_path) if out_path else None}
 
         if file_type == 1:
+            if bool(s.cfg.force_video_as_download):
+                res = download_via_1285_item(s, dir_num, media_num, file_type=1)
+                return {
+                    "kind": "video_cmd1285",
+                    "dirNum": dir_num,
+                    "mediaNum": media_num,
+                    "path": str(res.get("dump_dir") or ""),
+                }
             out_mp4 = str(s.cfg.video_out or "").strip()
             if not out_mp4:
                 out_root = camera_media_root(str(s.cfg.paths.staging_dir), str(s.cfg.camera.alias))
