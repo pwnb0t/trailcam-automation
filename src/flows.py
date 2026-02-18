@@ -410,6 +410,28 @@ def send_video_download_flow_item(
 
     stop_hb = threading.Event()
     hb_sent = 0
+    drained_packets = 0
+    duplicate_seq = 0
+    duplicate_seq_changed = 0
+    out_of_session_records = 0
+    pts_backwards_video = 0
+    pts_backwards_audio = 0
+
+    def drain_inbound(max_s: float = 0.8, quiet_s: float = 0.2) -> int:
+        """Best-effort socket drain to reduce cross-session stale packets."""
+        drained = 0
+        deadline = time.time() + max_s
+        last_pkt_ts = time.time()
+        while time.time() < deadline:
+            got = client.recv()
+            if not got:
+                if (time.time() - last_pkt_ts) >= quiet_s:
+                    break
+                continue
+            _addr, _data = got
+            drained += 1
+            last_pkt_ts = time.time()
+        return drained
 
     def hb_loop():
         nonlocal hb_sent
@@ -425,6 +447,9 @@ def send_video_download_flow_item(
     print(
         f"TX JSON: start play record cmdId=769 fileType={file_type} dirNum={dir_num} mediaNum={media_num} sessionNo={session_no}"
     )
+    drained_packets = drain_inbound()
+    if debug and drained_packets:
+        print(f"Drained stale UDP packets before start: {drained_packets}")
     client.send_cmd_json(start_req, art_ver=2, art_typ=2)
     t_hb = threading.Thread(target=hb_loop, daemon=True)
     t_hb.start()
@@ -467,9 +492,15 @@ def send_video_download_flow_item(
                     # Data channel: D0 subtype 0x02
                     if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x02:
                         seq16 = (body[2] << 8) | body[3]
-                        if seq16 not in chunks02:
-                            chunks02[seq16] = body[4:]
-                            last_data_ts = time.time()
+                        chunk = body[4:]
+                        prev = chunks02.get(seq16)
+                        if prev is not None:
+                            duplicate_seq += 1
+                            if prev != chunk:
+                                duplicate_seq_changed += 1
+                        # Keep latest chunk for this seq; helps if stale/older packet arrived first.
+                        chunks02[seq16] = chunk
+                        last_data_ts = time.time()
                         ack_win.append(seq16)
                         client.send_f1(0xD1, make_ack_body_seq_window16(0x02, list(ack_win)))
                         continue
@@ -490,8 +521,9 @@ def send_video_download_flow_item(
                 raise RuntimeError("No ARTEMIS records found in subtype=0x02 assembled stream")
 
             # Decode + decrypt ver=4 payload data.
-            v_h264 = bytearray()
-            a_aac = bytearray()
+            v_items: List[tuple[int, bytes, int]] = []
+            a_items: List[tuple[int, bytes, int]] = []
+            session_counts: Dict[int, int] = {}
             for ver, _typ, payload in records:
                 if ver != 4:
                     continue
@@ -502,21 +534,63 @@ def send_video_download_flow_item(
                 data_len = hdr["data_len"]
                 raw = payload[data_off : data_off + data_len]
                 dec = decrypt_v4_media_data_pages(raw)
+                sess = int(hdr["session_no"])
+                session_counts[sess] = session_counts.get(sess, 0) + 1
 
                 # Heuristic classification:
                 # - video-like: width/height set and data_len_off=16
                 # - audio-like: width/height 0 and data_len_off=20
                 if hdr["data_len_off"] == 16 and hdr["width"] and hdr["height"]:
-                    v_h264 += dec
+                    v_items.append((int(hdr["pts_ms"]), dec, sess))
                     v_cnt += 1
                 elif hdr["data_len_off"] == 20 and hdr["width"] == 0 and hdr["height"] == 0:
-                    a_aac += dec
+                    a_items.append((int(hdr["pts_ms"]), dec, sess))
                     a_cnt += 1
+
+            target_session_no = session_no
+            if target_session_no not in session_counts and session_counts:
+                # Fallback to dominant session seen in stream if camera did not honor requested value.
+                target_session_no = max(session_counts.items(), key=lambda kv: kv[1])[0]
+            if debug and session_counts:
+                print(
+                    f"ver=4 session_no histogram: {dict(sorted(session_counts.items()))}; "
+                    f"selected={target_session_no} requested={session_no}"
+                )
+
+            v_items_sess = [x for x in v_items if x[2] == target_session_no]
+            a_items_sess = [x for x in a_items if x[2] == target_session_no]
+            out_of_session_records = (len(v_items) - len(v_items_sess)) + (len(a_items) - len(a_items_sess))
+
+            for prev, cur in zip(v_items_sess, v_items_sess[1:]):
+                if cur[0] < prev[0]:
+                    pts_backwards_video += 1
+            for prev, cur in zip(a_items_sess, a_items_sess[1:]):
+                if cur[0] < prev[0]:
+                    pts_backwards_audio += 1
+
+            v_items_sess.sort(key=lambda x: (x[0],))
+            a_items_sess.sort(key=lambda x: (x[0],))
+
+            v_h264 = bytearray()
+            for _, dec, _ in v_items_sess:
+                v_h264 += dec
+            a_aac = bytearray()
+            for _, dec, _ in a_items_sess:
+                a_aac += dec
 
             if debug:
                 print(f"Start play info: {start_play_info}")
             print(f"Captured subtype_02 chunks={len(chunks02)} bytes={len(assembled)}")
-            print(f"Parsed ver=4 records: video={v_cnt} audio={a_cnt}")
+            print(
+                f"Parsed ver=4 records: video={v_cnt} audio={a_cnt} "
+                f"(session={target_session_no}: video={len(v_items_sess)} audio={len(a_items_sess)})"
+            )
+            if debug:
+                print(
+                    f"seq dupes={duplicate_seq} changed={duplicate_seq_changed} "
+                    f"out_of_session={out_of_session_records} "
+                    f"pts_backwards(video/audio)={pts_backwards_video}/{pts_backwards_audio}"
+                )
 
             if not v_h264:
                 raise RuntimeError("No decrypted video bytes produced (ver=4 video records not found)")
