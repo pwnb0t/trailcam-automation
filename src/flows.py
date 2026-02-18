@@ -74,6 +74,7 @@ def send_photo_download_flow(
     saw_download_data = threading.Event()
     hb_sent = 0
     dl_req_sent = 0
+    drained_packets = 0
 
     def send_download_req():
         nonlocal dl_req_sent
@@ -106,9 +107,28 @@ def send_photo_download_flow(
             return
         send_download_req()
 
+    def drain_inbound(max_s: float = 0.8, quiet_s: float = 0.2) -> int:
+        """Best-effort socket drain to reduce stale packets from previous operations."""
+        drained = 0
+        deadline = time.time() + max_s
+        last_pkt_ts = time.time()
+        while time.time() < deadline:
+            got = client.recv()
+            if not got:
+                if (time.time() - last_pkt_ts) >= quiet_s:
+                    break
+                continue
+            _addr, _data = got
+            drained += 1
+            last_pkt_ts = time.time()
+        return drained
+
     print(
         f"TX JSON: download photo cmdId=1285 fileType={file_type} dirNum={dir_num} mediaNum={media_num} art_typ={art_typ}"
     )
+    drained_packets = drain_inbound()
+    if debug and drained_packets:
+        print(f"Drained stale UDP packets before photo download: {drained_packets}")
     send_download_req()
     t_hb = threading.Thread(target=hb_loop, daemon=True)
     t_req = threading.Thread(target=req_resend_loop, daemon=True)
@@ -251,6 +271,8 @@ def send_photo_download_flow(
         except Exception:
             return None
 
+    extracted_meta: Dict[Path, Dict[str, int]] = {}
+
     def extract_jpegs_from_artemis_stream(label: str, blob: bytes) -> List[Path]:
         if not blob:
             return []
@@ -260,7 +282,11 @@ def send_photo_download_flow(
         out_paths: List[Path] = []
         for idx, (ver, typ, payload) in enumerate(recs, start=1):
             h = parse_transfer_header72(payload)
-            if h and (h["dirNum"] != dir_num or h["mediaNum"] != media_num):
+            # Require a parseable transfer header and exact target match.
+            # Without this we can accidentally pick unrelated/stale small JPEG payloads.
+            if not h:
+                continue
+            if h["dirNum"] != dir_num or h["mediaNum"] != media_num:
                 continue
             if len(payload) < 72:
                 continue
@@ -280,6 +306,12 @@ def send_photo_download_flow(
             p = out_dir / f"{label}_record_{idx:03d}_ver{ver}_typ{typ}_{len(jpg)}.jpg"
             p.write_bytes(jpg)
             out_paths.append(p)
+            declared_len = int(h.get("dataLen") or 0)
+            extracted_meta[p] = {
+                "declared_len": declared_len,
+                "len_delta": abs(declared_len - len(jpg)) if declared_len > 0 else 1_000_000_000,
+                "typ7": 1 if typ == 7 else 0,
+            }
         return out_paths
 
     extracted: List[Path] = []
@@ -288,12 +320,13 @@ def send_photo_download_flow(
 
     best_path: Optional[Path] = None
     if extracted:
-        # Choose the largest candidate for this file. The stream can include small previews too.
-        # If there are multiple large candidates, prefer typ=7 (observed for full payload) as a tie-breaker.
-        def score(p: Path) -> tuple[int, int]:
-            name = p.name
-            typ7 = 1 if "_typ7_" in name else 0
-            return (p.stat().st_size, typ7)
+        # Prefer candidate with a declared transfer length and tight size match, then typ7, then largest.
+        def score(p: Path) -> tuple[int, int, int, int]:
+            m = extracted_meta.get(p, {})
+            declared = int(m.get("declared_len", 0))
+            delta = int(m.get("len_delta", 1_000_000_000))
+            typ7 = int(m.get("typ7", 0))
+            return (1 if declared > 0 else 0, -delta, typ7, p.stat().st_size)
 
         best_path = sorted(extracted, key=score, reverse=True)[0]
         final_path = out_dir / "download.jpg"
@@ -311,6 +344,7 @@ def send_photo_download_flow(
         "acked_seq4": acked_seq4,
         "hb_sent": hb_sent,
         "req1285_sent": dl_req_sent,
+        "drained_packets": drained_packets,
         "dump_dir": str(out_dir),
         "best_jpeg": str(out_dir / "download.jpg") if (out_dir / "download.jpg").exists() else None,
     }
