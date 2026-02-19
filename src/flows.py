@@ -771,6 +771,20 @@ def send_video_download_flow_item(
                     strict_issues.append(f"missing_seq={missing_seq}")
                 if duplicate_seq_changed > 0:
                     strict_issues.append(f"duplicate_seq_changed={duplicate_seq_changed}")
+                if out_of_session_records > 0:
+                    strict_issues.append(f"out_of_session_records={out_of_session_records}")
+                if pts_backwards_video > 0:
+                    strict_issues.append(f"pts_backwards_video={pts_backwards_video}")
+                if pts_backwards_audio > 0:
+                    strict_issues.append(f"pts_backwards_audio={pts_backwards_audio}")
+                try:
+                    expected_total_frame = int(start_play_info.get("totalFrame", 0))
+                except Exception:
+                    expected_total_frame = 0
+                if expected_total_frame > 0 and len(v_items_sess) != expected_total_frame:
+                    strict_issues.append(
+                        f"video_frame_count={len(v_items_sess)} expected_totalFrame={expected_total_frame}"
+                    )
                 if strict_issues:
                     raise RuntimeError(
                         "Strict video transport check failed: " + ", ".join(strict_issues)
