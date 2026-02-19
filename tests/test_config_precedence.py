@@ -49,6 +49,7 @@ client:
   download_idle_s: 3.0
   photo_download_retries: 4
   video_fps: 24
+  strict_video: false
 paths:
   staging_dir: "cfg/staging"
   tmp_dir: "cfg/tmp"
@@ -91,8 +92,30 @@ class TestConfigPrecedence(unittest.TestCase):
             self.assertEqual(cfg.client.download_listen_s, 12.5)  # config-only
             self.assertEqual(cfg.client.download_idle_s, 3.0)  # config-only
             self.assertEqual(cfg.client.video_fps, 24)  # config-only
+            self.assertFalse(cfg.client.strict_video)  # config default
             self.assertEqual(cfg.paths.staging_dir, str(cli_staging))  # CLI override
             self.assertEqual(cfg.paths.tmp_dir, str(cli_tmp))  # CLI override
+
+    def test_strict_video_cli_override(self):
+        with tempfile.TemporaryDirectory(prefix="cfg_strict_video_") as td:
+            root = Path(td)
+            cfg_path = root / "config.yaml"
+            _write_config(cfg_path)
+
+            cfg = parse_config_and_args(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--camera",
+                    "back",
+                    "--download-single",
+                    "105",
+                    "--dir-num",
+                    "100",
+                    "--strict-video",
+                ]
+            )
+            self.assertTrue(cfg.client.strict_video)
 
     def test_page_item_cnt_is_clamped_for_list_and_download_ops(self):
         with tempfile.TemporaryDirectory(prefix="cfg_clamp_") as td:
@@ -124,4 +147,3 @@ class TestConfigPrecedence(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

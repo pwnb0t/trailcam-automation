@@ -15,6 +15,7 @@ See `config.example.yaml` (you can name your real file `config.yaml` or `config.
 - Put default knobs under `client:` (wifi interface, UDP bind port, page sizes, timeouts).
   - Note: `client.page_no` is intentionally CLI-only; do not put it in config.yaml.
   - `photo_download_retries` controls per-item retry count used by sync for flaky photo transfers.
+  - `strict_video` enables stricter video transport validation (`missing_seq` or changed duplicate sequence fails download).
 - Put output paths under `paths:`.
   - `staging_dir`: raw downloaded files (`/mnt/trailcam/staging` on `piiter`).
   - `final_media_dir`: final organized media root (for sync flow, e.g. `/mnt/trailcam/media`).

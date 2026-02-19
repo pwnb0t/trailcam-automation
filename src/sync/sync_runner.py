@@ -178,6 +178,7 @@ class SyncRunner:
             download_idle_s=c.download_idle_s,
             photo_download_retries=c.photo_download_retries,
             video_fps=c.video_fps,
+            strict_video=c.strict_video,
         )
 
     def _paths_cfg(self) -> PathsConfig:

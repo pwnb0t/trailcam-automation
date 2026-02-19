@@ -20,6 +20,7 @@ from src.constants import (
     DEFAULT_DOWNLOAD_IDLE_S,
     DEFAULT_PHOTO_DOWNLOAD_RETRIES,
     DEFAULT_VIDEO_FPS,
+    DEFAULT_STRICT_VIDEO,
     DEFAULT_DIR_NUM,
     MAX_PAGE_ITEM_CNT_EXCLUSIVE,
 )
@@ -121,6 +122,7 @@ class ClientConfig:
     photo_download_retries: int = DEFAULT_PHOTO_DOWNLOAD_RETRIES
 
     video_fps: int = DEFAULT_VIDEO_FPS
+    strict_video: bool = DEFAULT_STRICT_VIDEO
 
 
 @dataclass(frozen=True)
@@ -201,6 +203,7 @@ def load_config(path: str | Path) -> AppConfig:
             "client.photo_download_retries",
         ),
         video_fps=_must_int(client_raw.get("video_fps", DEFAULT_VIDEO_FPS), "client.video_fps"),
+        strict_video=_must_bool(client_raw.get("strict_video", DEFAULT_STRICT_VIDEO), "client.strict_video"),
     )
 
     paths_raw = raw.get("paths") or {}
@@ -306,6 +309,7 @@ def _build_help_only_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tmp-dir", default="out/tmp")
     parser.add_argument("--dir-num", type=int, default=DEFAULT_DIR_NUM)
     parser.add_argument("--video-out", default="")
+    parser.add_argument("--strict-video", action="store_true", default=DEFAULT_STRICT_VIDEO)
     return parser
 
 
@@ -377,6 +381,12 @@ def _build_parser(
 
     parser.add_argument("--dir-num", type=int, default=DEFAULT_DIR_NUM, help="Media directory number (default: %(default)s)")
     parser.add_argument("--video-out", default="", help="Explicit output MP4 path for --download-single (when item is a video)")
+    parser.add_argument(
+        "--strict-video",
+        action="store_true",
+        default=bool(client_cfg.strict_video),
+        help="Enable strict video transport checks (missing sequence or changed duplicate sequence => fail)",
+    )
 
     return parser
 
@@ -484,6 +494,7 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
         download_idle_s=float(app_cfg.client.download_idle_s),
         photo_download_retries=int(app_cfg.client.photo_download_retries),
         video_fps=int(app_cfg.client.video_fps),
+        strict_video=bool(args.strict_video),
     )
 
     # Paths: allow CLI override of staging/tmp dirs.

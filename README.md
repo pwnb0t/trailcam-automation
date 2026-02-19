@@ -82,6 +82,8 @@ python3 client_runner.py --camera back --download-page --page-no 0 --page-item-c
 Download single media item:
 ```bash
 python3 client_runner.py --camera back --download-single 105 --dir-num 100
+# Optional: strict transport checks for video downloads.
+python3 client_runner.py --camera back --download-single 105 --dir-num 100 --strict-video
 ```
 
 List media:

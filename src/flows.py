@@ -483,6 +483,7 @@ def send_video_download_flow_item(
     listen_s = float(session.cfg.client.download_listen_s)
     idle_break_s = float(session.cfg.client.download_idle_s)
     debug = bool(session.cfg.debug)
+    strict_video = bool(getattr(session.cfg.client, "strict_video", False))
 
     if not out_mp4_path:
         out_mp4_path = str(_media_file_path(_session_media_root(session), dir_num, media_num, file_type=1))
@@ -763,6 +764,17 @@ def send_video_download_flow_item(
                     f"dedup_pts(video/audio)={dedup_video_pts}/{dedup_audio_pts} (disabled) "
                     f"v_modes={v_mode_counts}"
                 )
+
+            if strict_video:
+                strict_issues = []
+                if missing_seq > 0:
+                    strict_issues.append(f"missing_seq={missing_seq}")
+                if duplicate_seq_changed > 0:
+                    strict_issues.append(f"duplicate_seq_changed={duplicate_seq_changed}")
+                if strict_issues:
+                    raise RuntimeError(
+                        "Strict video transport check failed: " + ", ".join(strict_issues)
+                    )
 
             if not v_h264:
                 raise RuntimeError("No decrypted video bytes produced (ver=4 video records not found)")

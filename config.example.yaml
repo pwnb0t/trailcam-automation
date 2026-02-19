@@ -22,6 +22,7 @@ client:
   photo_download_retries: 3
 
   video_fps: 30
+  strict_video: false
 
 paths:
   # Staging area for raw downloads before organize/sync.
