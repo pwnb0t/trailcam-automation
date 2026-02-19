@@ -21,7 +21,77 @@ I've probably left some passwords and stuff in here so uhh, don't come to my hou
 
 -----
 
-# Quick test run -- downloads latest 2 files off trailcam
-1. Copy `config.example.yaml` to `config.yaml` and set your camera alias/values.
-2. Run:
-   `python3 client_runner.py --camera back --download-page --page-no 0 --page-item-cnt 2`
+# Requirements
+
+Python packages:
+- `bleak`
+- `cryptography`
+- `PyYAML`
+- `pytest` (for tests)
+
+Install example:
+```bash
+python3 -m pip install bleak cryptography PyYAML pytest
+```
+
+System tools used by parts of this repo:
+- `nmcli` (Wi-Fi connect flow)
+- `tshark` (pcap analysis tools)
+- `ffmpeg` (video extraction/mux and comparisons)
+
+# Config
+
+1. Copy `config.example.yaml` to `config.yaml`.
+2. Set camera aliases/values in `config.yaml` (`cameras`, `client`, `paths`, etc).
+
+# Run Tests
+
+`unittest` suite:
+```bash
+python3 -m unittest discover -s tests -p "test_*.py" -v
+```
+
+`pytest`:
+```bash
+pytest -q
+```
+
+# Run `client_runner.py` (examples)
+
+Login/connect test only:
+```bash
+python3 client_runner.py --camera back --login-only
+```
+
+Download first page:
+```bash
+python3 client_runner.py --camera back --download-page --page-no 0 --page-item-cnt 12
+```
+
+Download single media item:
+```bash
+python3 client_runner.py --camera back --download-single 105 --dir-num 100
+```
+
+List media:
+```bash
+python3 client_runner.py --camera back --list-media-page --page-no 0 --page-item-cnt 48
+python3 client_runner.py --camera back --list-media-all --list-max-pages 200
+```
+
+Delete all media on camera (high impact):
+```bash
+python3 client_runner.py --camera back --delete-media-all
+```
+
+# Run `trailcam_sync.py` (examples)
+
+Default sync run:
+```bash
+python3 trailcam_sync.py
+```
+
+Explicit config path:
+```bash
+python3 trailcam_sync.py --config /path/to/config.yaml
+```
