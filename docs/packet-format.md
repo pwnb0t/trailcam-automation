@@ -26,8 +26,8 @@ The client code that parses this is `protocol.unpack_f1()`.
 ```
 
 Sequence interpretation:
-- subtype `0x00`: treat `seq_lo` as an 8-bit sequence (wraps at 255).
-- subtype `0x03`/`0x04`: treat `(seq_hi<<8)|seq_lo` as a 16-bit sequence for ordering.
+- subtype `0x00`: treat `(seq_hi<<8)|seq_lo` as a 16-bit sequence.
+- subtype `0x02`/`0x03`/`0x04`: treat `(seq_hi<<8)|seq_lo` as a 16-bit sequence for ordering.
 
 ## D1 ACK Packet (opcode 0xD1)
 
@@ -41,8 +41,8 @@ The client sends `F1 opcode=0xD1` with body shaped like:
 ```
 
 We currently send:
-- subtype `0x00`: `seq` values are 16-bit (`body[2:4]`, big-endian). In captures the high byte is often `0x00`.
-- subtype `0x03`/`0x04`: `seq` values are the seq16 values we are ACKing.
+- subtype `0x00`: `seq` values are 16-bit (`body[2:4]`, big-endian).
+- subtype `0x02`/`0x03`/`0x04`: `seq` values are the seq16 values we are ACKing.
 
 ## ARTEMIS Record (inside D0 payload streams)
 
@@ -58,3 +58,16 @@ The bulk streams and control streams embed records that look like:
 Parsing note:
 - When extracting from a continuous bulk stream, you must advance by `0x14 + len` for each record.
 - A naive scan that advances by `+1` can produce overlapping false positives on high-volume streams.
+
+## ver=4 Media Data Decrypt Rule (Video/Playback)
+
+For `ARTEMIS ver=4` media records (not command JSON records):
+- Payload includes a fixed header (empirically 108 bytes), followed by media `data`.
+- `data` is page-structured:
+  - page size: `0x1000`
+  - encrypted prefix per page: `0x60` bytes (AES-128-CBC, key `xs38nul7cqf7m1va`, zero IV)
+- Critical edge condition:
+  - decrypt the `0x60` prefix only when remaining bytes are `> 0x5f`
+  - do **not** partially decrypt short tail pages
+
+If you decrypt partial tails, output may remain playable but with frame corruption/repeats.

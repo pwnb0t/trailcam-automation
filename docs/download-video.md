@@ -122,6 +122,17 @@ What the decrypted output looks like:
   - Decrypting the page-prefix bytes yields ADTS AAC frames (starts with `0xFF F9 ...`).
   - MP4 samples store raw AAC without ADTS headers, so the camera stream appears to add a 7-byte ADTS header.
 
+### Critical Edge Condition (Fixed)
+
+There is one non-obvious requirement for correctness:
+
+- For each `0x1000` page, decrypt the first `0x60` bytes **only when remaining bytes are > `0x5f`**.
+- Do **not** partially decrypt short tail pages.
+
+This was previously wrong in our implementation and caused subtle video corruption (jumps/repeats) while still producing playable MP4 files.
+
+Detailed note: `docs/video-v4-decrypt-notes.md`.
+
 ## Current State: Reconstructing A Valid MP4 From PCAP (Main Video + Audio)
 
 From `pcap/trailcam_8-3-view-and-download-video.pcap`, we can reconstruct:

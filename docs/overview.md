@@ -22,6 +22,7 @@ This folder describes the on-wire protocol we have reverse engineered for the Tr
 - `docs/json-commands.md`
 - `docs/download-photo.md`
 - `docs/download-video.md`
+- `docs/video-v4-decrypt-notes.md`
 - `docs/config.md`
 
 ## Historical Notes
