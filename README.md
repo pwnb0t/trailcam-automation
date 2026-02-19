@@ -18,6 +18,17 @@ I needed to use a rooted android device to get the BT wakeup command. I also had
 Anyway, not done yet, unless I am and I didn't update this file. But that totally wouldn't happen.
 I've probably left some passwords and stuff in here so uhh, don't come to my house and hack my camera lol. (though if you actually understand all that's in this repo then you'll know that pw doesn't matter)
 
+-----
+
+# Docs
+- `docs/overview.md`
+- `docs/flows.md`
+- `docs/opcodes.md`
+- `docs/packet-format.md`
+- `docs/json-commands.md`
+- `docs/download-photo.md`
+- `docs/download-video.md`
+- `pcap/details.md`
 
 -----
 
