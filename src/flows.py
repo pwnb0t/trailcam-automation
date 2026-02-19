@@ -842,13 +842,6 @@ def send_video_download_flow_item(
                     expected_total_time_ms = int(start_play_info.get("totalTime", 0))
                 except Exception:
                     expected_total_time_ms = 0
-                if expected_total_frame > 0 and expected_total_time_ms > 0:
-                    derived_fps = (expected_total_frame * 1000.0) / float(expected_total_time_ms)
-                    nominal_fps = float(fps)
-                    if abs(derived_fps - nominal_fps) > 0.5:
-                        strict_issues.append(
-                            f"derived_fps={derived_fps:.3f} nominal_fps={nominal_fps:.3f}"
-                        )
                 if expected_total_frame > 0 and len(v_items_sess) != expected_total_frame:
                     strict_issues.append(
                         f"video_frame_count={len(v_items_sess)} expected_totalFrame={expected_total_frame}"
@@ -886,6 +879,20 @@ def send_video_download_flow_item(
             if subprocess.run(["ffmpeg", "-version"], capture_output=True).returncode != 0:
                 raise RuntimeError("ffmpeg not available on PATH, cannot mux video")
 
+            # Prefer camera-provided pacing when available.
+            mux_fps = float(fps)
+            try:
+                total_frame = int(start_play_info.get("totalFrame", 0))
+                total_time_ms = int(start_play_info.get("totalTime", 0))
+                if total_frame > 0 and total_time_ms > 0:
+                    derived = (total_frame * 1000.0) / float(total_time_ms)
+                    if 1.0 <= derived <= 120.0:
+                        mux_fps = float(derived)
+            except Exception:
+                pass
+            if debug:
+                print(f"Video mux fps: {mux_fps:.6f}")
+
             mp4_tmp = tmp_root / "out.mp4"
             cmd = [
                 "ffmpeg",
@@ -894,7 +901,7 @@ def send_video_download_flow_item(
                 "-loglevel",
                 "error",
                 "-r",
-                str(fps),
+                f"{mux_fps:.6f}",
                 "-i",
                 str(tmp_h264),
                 "-i",
