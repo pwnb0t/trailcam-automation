@@ -18,7 +18,7 @@ From pcap/trailcam_8-3-view-and-download-video.pcap, the app’s start playback 
   - mediaNum: 935
   - sessionNo: 37946
 
-I stored the original DSCF0935.MPG in the folder as a sibling.
+I stored the original DSCF0935.MP4 in the folder as a sibling.
 
 
 # trailcam_9-connect-thru-download-photo.pcap
@@ -74,4 +74,3 @@ This should be deleting just a video
 
 ## trailcam_12-format.pcap
 There was only one item left on the sdcard. I suspect the number of items does not matter and this is just formatting the memory card.
-

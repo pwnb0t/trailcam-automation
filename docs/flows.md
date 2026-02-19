@@ -30,7 +30,8 @@ This describes the high-level operation sequences the client performs.
 - Parse strict ARTEMIS records inside the reassembled stream.
 - For matching `dirNum/mediaNum`, extract JPEG from record payload:
   - Record payload includes a 72-byte header; the JPEG bytes begin at `payload[72:]`.
-- Write to the stable output layout: `out/media/<camera_alias>/<dirNum>/media####.jpg`.
+- Write to the stable output layout under `cfg.paths.staging_dir`:
+  - `<staging_dir>/<camera_alias>/<dirNum>/media####.jpg`
 
 ## Download Video (cmdId=769/cmdId=770 + bulk transfer)
 - Send `cmdId=769` start-play request for `(dirNum, mediaNum, fileType=1)`.
@@ -45,7 +46,8 @@ This describes the high-level operation sequences the client performs.
 - Split decrypted outputs:
   - Video records produce Annex-B H.264.
   - Audio records produce ADTS AAC.
-- Write `video.h264` and `audio.aac` to a temp directory, mux to MP4 with ffmpeg, then save to the final output path.
+- Write `video.h264` and `audio.aac` to a temp directory, mux to MP4 with ffmpeg, then save under:
+  - `<staging_dir>/<camera_alias>/<dirNum>/media####.mp4`
 - Send `cmdId=770` stop-play request.
 
 ## Delete Media (cmdId=773)

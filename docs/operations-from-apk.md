@@ -1,73 +1,70 @@
-› Look at the decompiled app and see if you can compile a list of all of the defined communication operations with the trailcam. Such as "view photo" "download photo" "list gallery" etc
+# Operations From APK
 
-• I’ll scan the decompiled sources for command definitions (cmdId, request/response classes, operation names), then produce a consolidated operation list with inferred meanings and confidence.
-• I checked the decompiled app’s protocol layer in apk/jadx_full_v2/sources/com/xlink/arlink/ArCommandId.java and the concrete command classes in apk/jadx_full_v2/sources/com/xlink/arlink/Ar*Command.java.
+This is a cleaned list of communication operations defined in the decompiled app (`apk/jadx_full_v2/...`), primarily from:
+- `com/xlink/arlink/ArCommandId.java`
+- `com/xlink/arlink/Ar*Command.java`
+- `com/xlink/arlink/ArLinkApi.java`
 
-Here is the compiled operation list.
+## Core Session / Transport
+- `cmdId=0` login (`EC_CMD_ID_LOGIN`)
+- `cmdId=1` logout (`EC_CMD_ID_LOGOUT`)
+- native login/logout entrypoints also exist via `ArLinkApi.logIn(...)` / `ArLinkApi.logOut(...)`
 
-## Core session / transport
+## Gallery / Media
+- `cmdId=768` get media list (`EC_CMD_ID_GET_MEDIA_LIST`)
+- `cmdId=772` get thumbnails (`EC_CMD_ID_GET_THUMBNAILS`)
+- `cmdId=1285` start file download (`EC_CMD_ID_START_FILE_DOWNLOAD`)
+- `cmdId=1286` stop file download (`EC_CMD_ID_STOP_FILE_DOWNLOAD`)
+- `cmdId=769` start play record (`EC_CMD_ID_START_PLAY_RECORD`)
+- `cmdId=770` stop play record (`EC_CMD_ID_STOP_PLAY_RECORD`)
+- `cmdId=771` play-record control (`EC_CMD_ID_CMD_PLAY_RECORD`) (constant defined; no direct command wrapper identified)
+- `cmdId=773` delete single media (`EC_CMD_ID_DELETE_MEDIA`)
+- `cmdId=774` delete all media (`EC_CMD_ID_DELETE_MEDIA_ALL`)
 
-- logIn native call (not sent via Ar*Command JSON class): ArLinkApi.logIn(...) in apk/jadx_full_v2/sources/com/xlink/arlink/ArLinkApi.java
-- logOut native call: ArLinkApi.logOut(...)
-- cmdId=0 EC_CMD_ID_LOGIN (defined constant)
-- cmdId=1 EC_CMD_ID_LOGOUT (defined constant)
+## Live View / Capture / Audio
+- `cmdId=258` start AV (`EC_CMD_ID_START_AV`)
+- `cmdId=259` stop AV (`EC_CMD_ID_STOP_AV`)
+- `cmdId=641` trigger snap (`EC_CMD_ID_TRIGGER_SNAP`)
+- `cmdId=643` trigger record (`EC_CMD_ID_TRIGGER_RECORD`)
+- `cmdId=644` stop record (`EC_CMD_ID_STOP_RECORD`)
+- `cmdId=256` open talk (`EC_CMD_ID_OPEN_TALK`)
+- `cmdId=257` close talk (`EC_CMD_ID_CLOSE_TALK`)
+- `cmdId=260` start audio (`EC_CMD_ID_START_AUDIO`)
+- `cmdId=261` stop audio (`EC_CMD_ID_STOP_AUDIO`)
 
-## Gallery / media operations
+## Device Settings / Maintenance
+- `cmdId=512` get device info (`EC_CMD_ID_GET_DEV_INFO`)
+- `cmdId=513` set device info (`EC_CMD_ID_SET_DEV_INFO`)
+- `cmdId=514` change password (`EC_CMD_ID_CHANGE_PASSWORD`)
+- `cmdId=515` video mirror (`EC_CMD_ID_VIDEO_MIRROR`)
+- `cmdId=516` video flip (`EC_CMD_ID_VIDEO_FLIP`)
+- `cmdId=517` restore factory (`EC_CMD_ID_RESTORE_TO_FACTORY`)
+- `cmdId=518` format SD card (`EC_CMD_ID_FORMAT_SD_CARD`)
+- `cmdId=522` red lamp (`EC_CMD_ID_RED_LAMP`)
+- `cmdId=523` change stream type (`EC_CMD_ID_CHANGE_STREAM_TYPE`)
+- `cmdId=1024` firmware upgrade (`EC_CMD_ID_FW_UPGRADE`)
 
-- cmdId=768 EC_CMD_ID_GET_MEDIA_LIST (list gallery page): ArMediaListGetCommand
-- cmdId=772 EC_CMD_ID_GET_THUMBNAILS (thumbnail fetch): ArThumbnailGetCommand
-- cmdId=1285 EC_CMD_ID_START_FILE_DOWNLOAD (download file by fileType/dirNum/mediaNum): ArMediaFileDownloadCommand
-- cmdId=1286 EC_CMD_ID_STOP_FILE_DOWNLOAD (defined constant)
-- cmdId=769 EC_CMD_ID_START_PLAY_RECORD (view/playback stream for a media item): ArStartPlayRecordCommand
-- cmdId=770 EC_CMD_ID_STOP_PLAY_RECORD: ArStopPlayRecordCommand
-- cmdId=771 EC_CMD_ID_CMD_PLAY_RECORD (defined constant; no direct Ar*Command class found)
-- cmdId=773 EC_CMD_ID_DELETE_MEDIA (delete one media item): ArDeleteMediaCommand
-- cmdId=774 EC_CMD_ID_DELETE_MEDIA_ALL (delete all media): ArDeleteAllMediaCommand
+## Factory / Diagnostics / Logs
+- `cmdId=1280` set factory data (`EC_CMD_ID_SET_FACTORY_DATA`)
+- `cmdId=1281` start sleep (`EC_CMD_ID_START_SLEEP`)
+- `cmdId=1282` get log file list (`EC_CMD_ID_GET_LOG_FILE_LIST`)
+- `cmdId=1283` get log config (`EC_CMD_ID_GET_LOG_CONFIG`)
+- `cmdId=1284` set log config (`EC_CMD_ID_SET_LOG_CONFIG`)
+- `cmdId=1288` set factory NV mode (`EC_CMD_ID_SET_FACTORY_TEST_NV_MODE`)
+- `cmdId=1289` start factory test bluetooth (`EC_CMD_ID_START_FACTORY_TEST_BLUETOOTH`)
+- `cmdId=1290` stop factory test bluetooth (`EC_CMD_ID_STOP_FACTORY_TEST_BLUETOOTH`)
+- `cmdId=1291` start factory test scan QR (`EC_CMD_ID_START_FACTORY_TEST_SCAN_QR`)
+- `cmdId=1292` stop factory test scan QR (`EC_CMD_ID_STOP_FACTORY_TEST_SCAN_QR`)
 
-## Live view / capture / audio
+## Mapping To Current Project Goals
+- List gallery: `768`
+- Get thumbnails: `772`
+- Download photo/file: `1285`
+- Video playback/download flow: `769` + `770`
+- Delete single item: `773`
+- Delete all (APK operation): `774`
+- Format SD card: `518`
 
-- cmdId=258 EC_CMD_ID_START_AV (start live AV): ArStartAVCommand
-- cmdId=259 EC_CMD_ID_STOP_AV: ArStopAVCommand
-- cmdId=641 EC_CMD_ID_TRIGGER_SNAP (take photo): ArTriggerSnapCommand
-- cmdId=643 EC_CMD_ID_TRIGGER_RECORD (start recording): ArTriggerRecordCommand
-- cmdId=644 EC_CMD_ID_STOP_RECORD: ArStopRecordCommand
-- cmdId=256 EC_CMD_ID_OPEN_TALK: ArSpeckOpenCommand
-- cmdId=257 EC_CMD_ID_CLOSE_TALK: ArSpeckCloseCommand
-- cmdId=260 EC_CMD_ID_START_AUDIO: ArStartAudioCommand
-- cmdId=261 EC_CMD_ID_STOP_AUDIO: ArStopAudioCommand
-
-## Device settings / maintenance
-
-- cmdId=512 EC_CMD_ID_GET_DEV_INFO: ArDevInfoGetCommand
-- cmdId=513 EC_CMD_ID_SET_DEV_INFO: ArDevInfoSetCommand
-- cmdId=514 EC_CMD_ID_CHANGE_PASSWORD: ArChangePasswordCommand
-- cmdId=515 EC_CMD_ID_VIDEO_MIRROR (defined constant)
-- cmdId=516 EC_CMD_ID_VIDEO_FLIP (defined constant)
-- cmdId=517 EC_CMD_ID_RESTORE_TO_FACTORY: ArRestoreToFactoryCommand
-- cmdId=518 EC_CMD_ID_FORMAT_SD_CARD: ArSdFormatCommand
-- cmdId=522 EC_CMD_ID_RED_LAMP: ArRedLampCommand
-- cmdId=523 EC_CMD_ID_CHANGE_STREAM_TYPE: ArChangeStreamTypeCommand
-- cmdId=1024 EC_CMD_ID_FW_UPGRADE (defined constant)
-
-## Factory / diagnostics / logs
-
-- cmdId=1280 EC_CMD_ID_SET_FACTORY_DATA (defined constant)
-- cmdId=1281 EC_CMD_ID_START_SLEEP: ArSleepCommand
-- cmdId=1282 EC_CMD_ID_GET_LOG_FILE_LIST (defined constant)
-- cmdId=1283 EC_CMD_ID_GET_LOG_CONFIG (defined constant)
-- cmdId=1284 EC_CMD_ID_SET_LOG_CONFIG (defined constant)
-- cmdId=1288 EC_CMD_ID_SET_FACTORY_TEST_NV_MODE: ArTestModeRedLampCommand
-- cmdId=1289 EC_CMD_ID_START_FACTORY_TEST_BLUETOOTH: ArTestModeStartBlueToothCommand
-- cmdId=1290 EC_CMD_ID_STOP_FACTORY_TEST_BLUETOOTH: ArTestModeStopBlueToothCommand
-- cmdId=1291 EC_CMD_ID_START_FACTORY_TEST_SCAN_QR: ArTestModeScanQRCommand
-- cmdId=1292 EC_CMD_ID_STOP_FACTORY_TEST_SCAN_QR: ArTestModeStopScanQRCommand
-
-## UI-level mapping you asked for
-
-- “List gallery” -> 768
-- “Get gallery thumbnails” -> 772
-- “View photo/video” (playback path) -> 769 + 770
-- “Download photo/video file” -> 1285 (optionally 1286 stop)
-- “Delete one media” -> 773
-- “Delete all media” -> 774 (and app also uses format 518 in some flows)
-- “Format SD card” -> 518
+Notes:
+- In this repo, `--delete-media-all` currently maps to format (`cmdId=518`) in runtime flow.
+- Not every APK-defined command is implemented in this project.

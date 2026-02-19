@@ -48,6 +48,7 @@ Carries a `D1`-framed chunk inside its body:
 
 Subtypes we actively handle:
 - `subtype=0x00`: control plane (ARTEMIS-wrapped encrypted JSON, small chunks)
+- `subtype=0x02`: video playback/download bulk stream (ARTEMIS-wrapped ver=4 media records, 16-bit sequence)
 - `subtype=0x03`: download bulk stream (ARTEMIS-wrapped binary payloads, 16-bit sequence)
 - `subtype=0x04`: secondary bulk stream (thumbnails and other large payloads depending on flow)
 
@@ -61,7 +62,7 @@ Important details:
 - The high byte is `body[2]`.
   - Reassembly must be done by seq16 ordering.
 
-The current client uses a small sliding-window ACK list (similar shape to the app) for `0x03`/`0x04`.
+The current client uses a small sliding-window ACK list (similar shape to the app) for `0x02`/`0x03`/`0x04`.
 
 ## External/Unrelated
 

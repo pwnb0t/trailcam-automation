@@ -42,8 +42,8 @@ The header includes fields that match the requested media:
 
 ## Output
 
-The client writes to the stable output layout:
-- `out/media/<camera_alias>/<dirNum>/media####.jpg` for the requested `(dirNum, mediaNum)`.
+The client writes to the stable output layout under `cfg.paths.staging_dir`:
+- `<staging_dir>/<camera_alias>/<dirNum>/media####.jpg` for the requested `(dirNum, mediaNum)`.
 
 ## Reference Implementation
 

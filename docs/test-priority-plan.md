@@ -56,9 +56,23 @@ This plan lists the highest-value automated tests to add first, ordered by risk 
 
 ## Suggested Immediate Implementation
 
-Write these now:
+Implemented:
 - `tests/test_protocol_video_v4_decrypt.py`
 - `tests/test_protocol_sequencing.py`
 
-These directly cover the two highest-risk areas: sequencing and the v4 video decrypt fix.
+These cover the two highest-risk areas: sequencing and the v4 video decrypt fix.
 
+## Current Highest Remaining Priorities
+
+1. v4 header parser fixture tests
+- Target `_parse_artemis_v4_payload_header()` in `src/flows.py`.
+- Cover both observed `data_len` offsets (16 and 20), invalid length cases, and short payload rejection.
+
+2. Offline pcap regression test fixtures
+- Add small deterministic fixtures for:
+  - one known-good photo extraction path
+  - one known-good video metadata parse path (record/session counts)
+- Goal: catch regressions without requiring a live camera.
+
+3. CLI/config precedence tests
+- Validate defaults < `config.yaml` < CLI for allowed override fields.
