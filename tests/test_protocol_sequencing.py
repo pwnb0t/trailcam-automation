@@ -54,7 +54,30 @@ class TestProtocolSequencing(unittest.TestCase):
         self.assertEqual(records[0][1], 2)
         self.assertEqual(records[0][2], payload)
 
+    def test_parse_artemis_records_strict_skips_invalid_then_parses_next(self):
+        # First record has invalid length (too large), parser should skip it and
+        # still parse the following valid record.
+        bad = (
+            b"ARTEMIS\x00"
+            + struct.pack("<I", 4)
+            + struct.pack("<I", 1)
+            + struct.pack("<I", 9999)  # invalid for this blob
+            + b"short"
+        )
+        good_payload = b'{"cmdId":0}'
+        good = (
+            b"ARTEMIS\x00"
+            + struct.pack("<I", 2)
+            + struct.pack("<I", 1)
+            + struct.pack("<I", len(good_payload))
+            + good_payload
+        )
+        records = parse_artemis_records_strict(bad + good)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0][0], 2)
+        self.assertEqual(records[0][1], 1)
+        self.assertEqual(records[0][2], good_payload)
+
 
 if __name__ == "__main__":
     unittest.main()
-

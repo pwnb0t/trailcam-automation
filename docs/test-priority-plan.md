@@ -79,3 +79,5 @@ Status:
 Status:
 - Added `tests/test_flows_v4_header.py` for `_parse_artemis_v4_payload_header()` offset-16/offset-20 and invalid cases.
 - Added `tests/test_config_precedence.py` for camera selection requirement, page item count clamp behavior, and config-vs-CLI precedence checks.
+- Added `tests/test_protocol_video_normalize.py` for Annex-B/len16/raw normalization behavior.
+- Expanded `tests/test_protocol_sequencing.py` with invalid-record skip/recovery coverage for strict ARTEMIS parsing.
