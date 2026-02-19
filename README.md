@@ -107,6 +107,11 @@ Explicit config path:
 python3 trailcam_sync.py --config /path/to/config.yaml
 ```
 
+Stage-only run (download+verify to staging, no clear/organize):
+```bash
+python3 trailcam_sync.py --stage-only
+```
+
 Show current sync state and next action:
 ```bash
 python3 trailcam_sync.py --status

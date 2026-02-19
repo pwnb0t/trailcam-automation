@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from src.sync.status import SyncStatus
 
-DEFAULT_STATUS = "pending"
+DEFAULT_STATUS = SyncStatus.PENDING.value
 
 
 @dataclass(frozen=True)

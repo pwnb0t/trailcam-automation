@@ -8,27 +8,30 @@ from typing import Optional
 
 from src.config import load_config
 from src.notify.email_notifier import EmailNotifier
+from src.sync.status import SyncStatus
 from src.sync.sync_runner import SyncRunner
 from src.sync.sync_state import SyncStateStore
 
 
 def _next_step_for_status(status: str, dry_run: bool) -> str:
     s = str(status or "").strip().lower()
-    if s in ("", "pending"):
+    if s in ("", SyncStatus.PENDING.value):
         return "connect/login, then download missing media"
-    if s == "download":
+    if s == SyncStatus.DOWNLOAD.value:
         return "continue download pass (list media, download missing items)"
-    if s == "verify":
+    if s == SyncStatus.VERIFY.value:
         return "verify manifests; if missing items are found, go back to download"
-    if s == "clear":
+    if s == SyncStatus.CLEAR.value:
         if dry_run:
             return "skip clear (dry-run), then organize"
         return "delete all media on camera, then organize"
-    if s == "organize":
+    if s == SyncStatus.ORGANIZE.value:
         return "organize staged files into final media layout"
-    if s == "done":
+    if s == SyncStatus.STAGED.value:
+        return "staging complete; inspect staged files or rerun without --stage-only"
+    if s == SyncStatus.DONE.value:
         return "skip this camera (already done in state)"
-    if s == "error":
+    if s == SyncStatus.ERROR.value:
         return "inspect error list and rerun sync (camera will retry)"
     return "unknown status; inspect state file and rerun sync"
 
@@ -101,6 +104,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--final-media-dir", default=None, help="Final organized media root")
     p.add_argument("--dupes-dir", default=None, help="Destination for filename/content collisions")
     p.add_argument("--dry-run", action="store_true", help="Do not clear camera or move files; print actions")
+    p.add_argument(
+        "--stage-only",
+        action="store_true",
+        help="Download/verify into staging only; skip delete-media-all and organize",
+    )
     p.add_argument("--debug", action="store_true", help="Verbose protocol logging while connected")
     p.add_argument(
         "--status",
@@ -137,9 +145,10 @@ async def main() -> None:
         notifier=notifier,
         debug=bool(args.debug),
         dry_run=bool(args.dry_run),
+        stage_only=bool(args.stage_only),
     )
     all_ok = await runner.run_all()
-    if all_ok:
+    if all_ok and not args.stage_only:
         state = state_store.load()
         run_id = str(state.get("run_id_last") or "").strip() or None
         rotated = state_store.rotate_if_exists(suffix=run_id)

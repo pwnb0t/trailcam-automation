@@ -16,6 +16,7 @@ from src.flows import download_photo_to_out_item, send_video_download_flow_item
 from src.notify.email_notifier import EmailNotifier
 from src.sync.manifest import build_staging_manifest, build_trailcam_manifest, compute_missing
 from src.sync.organize import organize_one
+from src.sync.status import SyncStatus
 from src.sync.sync_state import MediaKey, SyncStateStore
 
 
@@ -34,6 +35,7 @@ class SyncRunner:
         notifier: Optional[EmailNotifier] = None,
         debug: bool = False,
         dry_run: bool = False,
+        stage_only: bool = False,
     ):
         self.app_cfg = app_cfg
         self.state_store = state_store
@@ -42,6 +44,7 @@ class SyncRunner:
         self.notifier = notifier
         self.debug = bool(debug)
         self.dry_run = bool(dry_run)
+        self.stage_only = bool(stage_only)
 
     async def run_all(self) -> bool:
         aliases = sorted(self.app_cfg.cameras.keys())
@@ -68,7 +71,7 @@ class SyncRunner:
         state = self.state_store.load()
         state["run_id_last"] = _run_id_now()
         cam_state = self.state_store.ensure_camera_state(state, alias)
-        if str(cam_state.get("status", "")).lower() == "done":
+        if str(cam_state.get("status", "")).lower() == SyncStatus.DONE.value:
             print(f"[{alias}] status=done in state file; skipping")
             self.state_store.save(state)
             return
@@ -84,7 +87,7 @@ class SyncRunner:
         print(f"[{alias}] connect/login ...")
         session = await connect_and_login(cfg)
         try:
-            cam_state["status"] = "download"
+            cam_state["status"] = SyncStatus.DOWNLOAD.value
             self.state_store.save(state)
 
             trailcam_manifest: Optional[Dict[MediaKey, Dict[str, Any]]] = None
@@ -105,7 +108,7 @@ class SyncRunner:
                     missing=missing,
                 )
 
-            cam_state["status"] = "verify"
+            cam_state["status"] = SyncStatus.VERIFY.value
             self.state_store.save(state)
 
             # Verify: full rebuild of both manifests; if mismatch, loop back to download.
@@ -116,7 +119,7 @@ class SyncRunner:
                 print(f"[{alias}] verify: trailcam={len(trailcam_manifest)} staged={len(staging_manifest)} missing={len(missing)}")
                 if not missing:
                     break
-                cam_state["status"] = "download"
+                cam_state["status"] = SyncStatus.DOWNLOAD.value
                 self.state_store.save(state)
                 await self._download_missing(
                     state=state,
@@ -125,10 +128,16 @@ class SyncRunner:
                     cam_state=cam_state,
                     missing=missing,
                 )
-                cam_state["status"] = "verify"
+                cam_state["status"] = SyncStatus.VERIFY.value
                 self.state_store.save(state)
 
-            cam_state["status"] = "clear"
+            if self.stage_only:
+                cam_state["status"] = SyncStatus.STAGED.value
+                self.state_store.save(state)
+                print(f"[{alias}] stage-only: leaving files in staging, skipping clear/organize")
+                return
+
+            cam_state["status"] = SyncStatus.CLEAR.value
             self.state_store.save(state)
             if self.dry_run:
                 print(f"[{alias}] dry-run: skipping clear")
@@ -136,7 +145,7 @@ class SyncRunner:
                 print(f"[{alias}] clear: delete media all (format)")
                 FormatSdCardCommand(session).run()
 
-            cam_state["status"] = "organize"
+            cam_state["status"] = SyncStatus.ORGANIZE.value
             self.state_store.save(state)
             self._organize_staging(
                 state=state,
@@ -146,11 +155,11 @@ class SyncRunner:
                 trailcam_manifest=trailcam_manifest or {},
             )
 
-            cam_state["status"] = "done"
+            cam_state["status"] = SyncStatus.DONE.value
             self.state_store.save(state)
             print(f"[{alias}] done")
         except Exception as e:
-            cam_state["status"] = "error"
+            cam_state["status"] = SyncStatus.ERROR.value
             cam_state.setdefault("errors", []).append(str(e))
             self.state_store.save(state)
             raise
