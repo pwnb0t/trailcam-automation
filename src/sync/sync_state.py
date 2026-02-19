@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 DEFAULT_STATUS = "pending"
@@ -53,6 +54,23 @@ class SyncStateStore:
         tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", "utf-8")
         tmp.replace(self.path)
 
+    def rotate_if_exists(self, *, suffix: Optional[str] = None) -> Optional[Path]:
+        """Rotate current state file to a timestamped path and remove the active file.
+
+        Returns destination path if rotated, else None when no state file exists.
+        """
+        if not self.path.exists():
+            return None
+        stamp = suffix or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        base = self.path.with_name(f"{self.path.stem}.{stamp}{self.path.suffix}")
+        dst = base
+        n = 1
+        while dst.exists():
+            dst = self.path.with_name(f"{self.path.stem}.{stamp}.{n}{self.path.suffix}")
+            n += 1
+        self.path.replace(dst)
+        return dst
+
     @staticmethod
     def ensure_camera_state(state: Dict[str, Any], alias: str) -> Dict[str, Any]:
         cameras = state.setdefault("cameras", {})
@@ -70,4 +88,3 @@ class SyncStateStore:
         cam.setdefault("organized", {})
         cam.setdefault("errors", [])
         return cam
-

@@ -138,7 +138,13 @@ async def main() -> None:
         debug=bool(args.debug),
         dry_run=bool(args.dry_run),
     )
-    await runner.run_all()
+    all_ok = await runner.run_all()
+    if all_ok:
+        state = state_store.load()
+        run_id = str(state.get("run_id_last") or "").strip() or None
+        rotated = state_store.rotate_if_exists(suffix=run_id)
+        if rotated is not None:
+            print(f"Run successful. Rotated state file to: {rotated}")
 
 
 if __name__ == "__main__":

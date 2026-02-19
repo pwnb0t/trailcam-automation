@@ -43,12 +43,14 @@ class SyncRunner:
         self.debug = bool(debug)
         self.dry_run = bool(dry_run)
 
-    async def run_all(self) -> None:
+    async def run_all(self) -> bool:
         aliases = sorted(self.app_cfg.cameras.keys())
+        all_ok = True
         for alias in aliases:
             try:
                 await self.run_camera(alias)
             except Exception as e:
+                all_ok = False
                 print(f"[{alias}] failed: {e}")
                 if self.notifier is not None:
                     try:
@@ -59,6 +61,7 @@ class SyncRunner:
                         )
                     except Exception as notify_err:
                         print(f"[{alias}] failure email send failed: {notify_err}")
+        return all_ok
 
     async def run_camera(self, alias: str) -> None:
         cam = self.app_cfg.get_camera(alias)
