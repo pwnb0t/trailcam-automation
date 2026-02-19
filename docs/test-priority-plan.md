@@ -81,3 +81,5 @@ Status:
 - Added `tests/test_config_precedence.py` for camera selection requirement, page item count clamp behavior, and config-vs-CLI precedence checks.
 - Added `tests/test_protocol_video_normalize.py` for Annex-B/len16/raw normalization behavior.
 - Expanded `tests/test_protocol_sequencing.py` with invalid-record skip/recovery coverage for strict ARTEMIS parsing.
+- Added `tests/test_protocol_json_crypto.py` for encrypted JSON roundtrip/decrypt paths.
+- Added `tests/test_media_list_helpers.py` for media list extraction/normalization helpers.
