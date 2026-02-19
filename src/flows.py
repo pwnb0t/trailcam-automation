@@ -838,6 +838,17 @@ def send_video_download_flow_item(
                     expected_total_frame = int(start_play_info.get("totalFrame", 0))
                 except Exception:
                     expected_total_frame = 0
+                try:
+                    expected_total_time_ms = int(start_play_info.get("totalTime", 0))
+                except Exception:
+                    expected_total_time_ms = 0
+                if expected_total_frame > 0 and expected_total_time_ms > 0:
+                    derived_fps = (expected_total_frame * 1000.0) / float(expected_total_time_ms)
+                    nominal_fps = float(fps)
+                    if abs(derived_fps - nominal_fps) > 0.5:
+                        strict_issues.append(
+                            f"derived_fps={derived_fps:.3f} nominal_fps={nominal_fps:.3f}"
+                        )
                 if expected_total_frame > 0 and len(v_items_sess) != expected_total_frame:
                     strict_issues.append(
                         f"video_frame_count={len(v_items_sess)} expected_totalFrame={expected_total_frame}"
