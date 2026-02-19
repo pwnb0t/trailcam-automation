@@ -106,3 +106,8 @@ Explicit config path:
 ```bash
 python3 trailcam_sync.py --config /path/to/config.yaml
 ```
+
+Show current sync state and next action:
+```bash
+python3 trailcam_sync.py --status
+```
