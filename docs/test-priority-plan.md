@@ -64,11 +64,14 @@ These cover the two highest-risk areas: sequencing and the v4 video decrypt fix.
 
 ## Current Highest Remaining Priorities
 
-1. Offline pcap regression test fixtures
-- Add small deterministic fixtures for:
-  - one known-good photo extraction path
-  - one known-good video metadata parse path (record/session counts)
-- Goal: catch regressions without requiring a live camera.
+1. Offline pcap regression coverage
+- Goal: catch regressions without requiring a live camera session.
+
+Status:
+- Added `tests/test_pcap_regression.py` with:
+  - photo path regression (`trailcam_10-connect-thru-download-photo.pcap`, subtype `0x03`, ARTEMIS JPEG extraction sanity)
+  - video metadata regression (`trailcam_8-3-view-and-download-video.pcap`, subtype `0x02`, expected ver=4 record profile `304` video / `157` audio)
+- Note: these tests require `tshark`; they are skipped when `tshark` is unavailable.
 
 2. CLI/config precedence tests
 - Validate defaults < `config.yaml` < CLI for allowed override fields.
