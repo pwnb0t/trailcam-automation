@@ -729,28 +729,9 @@ def send_video_download_flow_item(
             v_items_sess.sort(key=lambda x: x[3])
             a_items_sess.sort(key=lambda x: x[3])
 
-            # Duplicate PTS records can appear. Keep first-in-record-order to avoid mutating stream
-            # chronology while still collapsing exact retransmit artifacts.
+            # Do not deduplicate by PTS: multiple records can legitimately share a PTS.
             dedup_video_pts = 0
             dedup_audio_pts = 0
-            v_by_pts: Dict[int, tuple[int, bytes, int, int]] = {}
-            for item in v_items_sess:
-                pts = item[0]
-                prev = v_by_pts.get(pts)
-                if prev is None:
-                    v_by_pts[pts] = item
-                else:
-                    dedup_video_pts += 1
-            a_by_pts: Dict[int, tuple[int, bytes, int, int]] = {}
-            for item in a_items_sess:
-                pts = item[0]
-                prev = a_by_pts.get(pts)
-                if prev is None:
-                    a_by_pts[pts] = item
-                else:
-                    dedup_audio_pts += 1
-            v_items_sess = sorted(v_by_pts.values(), key=lambda x: x[3])
-            a_items_sess = sorted(a_by_pts.values(), key=lambda x: x[3])
 
             v_h264 = bytearray()
             for _, dec, _, _ in v_items_sess:
@@ -779,7 +760,7 @@ def send_video_download_flow_item(
                     f"dropped_sentinel_video={dropped_sentinel_video} "
                     f"out_of_session={out_of_session_records} "
                     f"pts_backwards(video/audio)={pts_backwards_video}/{pts_backwards_audio} "
-                    f"dedup_pts(video/audio)={dedup_video_pts}/{dedup_audio_pts} "
+                    f"dedup_pts(video/audio)={dedup_video_pts}/{dedup_audio_pts} (disabled) "
                     f"v_modes={v_mode_counts}"
                 )
 

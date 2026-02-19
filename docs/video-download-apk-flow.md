@@ -116,3 +116,48 @@ File: `apk/jadx_full_v2/sources/com/xlink/arlink/ArLinkApi.java`.
   - frame typing/PTS handling,
   - model-specific dimension handling,
   - MP4 mux/write semantics.
+
+## Current reverse status (2026-02-18)
+
+### Verified parity checks
+- App-downloaded file for `media0105` (Android and iOS copies) is frame-identical to SD original:
+  - `pcap/media0105/2026-02-18_14.33.26.320_1E22669E.mp4`
+  - `pcap/media0105/KFYP6412.MP4`
+  - `/mnt/trailcam/backdump20260217/DSCF0105.MP4`
+- Our client output for the same media is not frame-identical:
+  - `/mnt/trailcam/testing13/staging/back/100/media0105.mp4`
+  - frame comparison: `141/305` frame-hash positions match, first mismatch at frame `20`.
+
+### What this means
+- The camera stream and source media are valid.
+- The app path (`libArLink.so` + Java callback + `MP4Codec`) reconstructs correctly.
+- Our mismatch is in our reverse-engineered playback stream decode/reassembly, not in gallery metadata, command IDs, or app-side transcoding.
+
+### Narrowed causes (ruled in / ruled out)
+- Ruled out:
+  - heartbeat burst/single/none cadence (no change in output mismatch)
+  - simple record ordering changes (`record_idx`, `pts`, and tested alternative sort keys)
+  - crude tail trimming assumptions (4/8/.. bytes) on each record
+  - alternate fixed AES prefix lengths (best remains `0x60` per `0x1000` page)
+- Still likely:
+  - native playback-frame decryption/reassembly detail in `libArLink.so` not yet replicated (per-record post-processing and/or secondary transform).
+
+### Native clues found
+- `libArLink.so` string table includes playback/file-download internals:
+  - `OnPBVideo_RecvData`, `OnPBAudio_RecvData`, `OnPBEnd`
+  - `File download data, dirNum:%03d, mediaNum:%04d, size:%d, msgLen:%d, checkData:[...]`
+  - `Media file check failed, dirNum:%03d, mediaNum:%04d, tailData:[...]`
+  - `lwlaes_decrypt ...`
+- This strongly suggests additional media integrity/check processing exists in native code beyond our current parser.
+
+## Root Cause Found (2026-02-18)
+
+Video corruption in our client was caused by a subtle mismatch in ver=4 media AES handling:
+
+- Correct behavior (from `libArLink.so` case 4): decrypt exactly `0x60` bytes at each `0x1000` page boundary **only if remaining bytes > `0x5f`**.
+- Our previous implementation partially decrypted short final tails (`>=16` bytes), which corrupted playback payloads.
+
+After matching native behavior exactly:
+
+- `media0105` from client/debug stream now matches SD-original frame-for-frame (`305/305`).
+- `trailcam_8-3-view-and-download-video.pcap` reconstructed video now matches app-saved MP4 frame-for-frame (`304/304`).

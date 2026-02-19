@@ -250,15 +250,12 @@ def decrypt_v4_media_data_pages(data: bytes) -> bytes:
 
     out = bytearray(data)
     for off in range(0, len(out), V4_PAGE_SIZE):
+        # Native behavior (libArLink.so, case 0/4): decrypt a fixed 0x60-byte
+        # prefix per 0x1000 page only when remaining bytes > 0x5f.
+        # Do not partially decrypt short tail pages.
+        if (len(out) - off) <= 0x5F:
+            continue
         ct = bytes(out[off : off + V4_PAGE_AES_CBC_PREFIX_LEN])
-        if not ct:
-            continue
-        if len(ct) < 16:
-            continue
-        if len(ct) % 16 != 0:
-            ct = ct[: (len(ct) // 16) * 16]
-        if not ct:
-            continue
         cipher = Cipher(algorithms.AES(AES_CMD_KEY), modes.CBC(AES_CMD_IV), backend=default_backend())
         dec = cipher.decryptor()
         pt = dec.update(ct) + dec.finalize()

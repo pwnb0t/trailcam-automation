@@ -277,8 +277,9 @@ def decrypt_v4_data_in_pages(
     - At the start of each 0x1000 page, the first 0x60 bytes are AES-128-CBC encrypted.
     - The remaining bytes in the page are plaintext.
 
-    We decrypt only full `crypt_len` chunks; if the tail is shorter, we decrypt the
-    largest multiple-of-16 prefix and leave the remainder untouched.
+    Native behavior in libArLink.so decrypts exactly `crypt_len` bytes per page only
+    when remaining bytes in the page are > 0x5f. It does not partially decrypt
+    short tail pages.
     """
     if page_size <= 0 or crypt_len <= 0:
         return data
@@ -287,15 +288,9 @@ def decrypt_v4_data_in_pages(
 
     out = bytearray(data)
     for off in range(0, len(out), page_size):
+        if (len(out) - off) <= 0x5F:
+            continue
         chunk = bytes(out[off : off + crypt_len])
-        if not chunk:
-            continue
-        if len(chunk) < 16:
-            continue
-        if len(chunk) % 16 != 0:
-            chunk = chunk[: (len(chunk) // 16) * 16]
-        if len(chunk) <= 0:
-            continue
         dec = _aes_128_cbc_decrypt(key16, iv16, chunk)
         out[off : off + len(dec)] = dec
     return bytes(out)
