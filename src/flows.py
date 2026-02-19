@@ -468,6 +468,23 @@ def _is_sentinel_video_frame(data: bytes) -> bool:
     return len(data) >= 5 and data[:5] == b"\x00\x00\x00\x01\x01"
 
 
+def _seq16_forward_delta(anchor: int, seq: int) -> int:
+    return (int(seq) - int(anchor)) & 0xFFFF
+
+
+def _order_seq16_from_anchor(keys: List[int], anchor: int) -> List[int]:
+    return sorted(keys, key=lambda s: _seq16_forward_delta(anchor, s))
+
+
+def _seq16_missing_from_anchor(keys: List[int], anchor: int) -> int:
+    if not keys:
+        return 0
+    ordered = _order_seq16_from_anchor(keys, anchor)
+    max_delta = _seq16_forward_delta(anchor, ordered[-1])
+    expected = max_delta + 1
+    return max(0, expected - len(ordered))
+
+
 def send_video_download_flow_item(
     session: TrailCamSession,
     dir_num: int,
@@ -484,6 +501,7 @@ def send_video_download_flow_item(
     idle_break_s = float(session.cfg.client.download_idle_s)
     debug = bool(session.cfg.debug)
     strict_video = bool(getattr(session.cfg.client, "strict_video", False))
+    max_seq_span = 20000
 
     if not out_mp4_path:
         out_mp4_path = str(_media_file_path(_session_media_root(session), dir_num, media_num, file_type=1))
@@ -515,6 +533,12 @@ def send_video_download_flow_item(
     out_of_session_records = 0
     pts_backwards_video = 0
     pts_backwards_audio = 0
+    wrap_events = 0
+    rx_seq_packets = 0
+    wrap_debug_lines_left = 24
+    prev_seq16_rx: Optional[int] = None
+    seq_anchor: Optional[int] = None
+    seq_outliers_dropped = 0
 
     def drain_inbound(max_s: float = 0.8, quiet_s: float = 0.2) -> int:
         """Best-effort socket drain to reduce cross-session stale packets."""
@@ -624,6 +648,36 @@ def send_video_download_flow_item(
                     if opcode == 0xD0 and len(body) >= 4 and body[0] == 0xD1 and body[1] == 0x02:
                         seq16 = (body[2] << 8) | body[3]
                         chunk = body[4:]
+                        rx_seq_packets += 1
+                        if seq_anchor is None:
+                            seq_anchor = seq16
+                        else:
+                            if _seq16_forward_delta(seq_anchor, seq16) > max_seq_span:
+                                seq_outliers_dropped += 1
+                                if debug and seq_outliers_dropped <= 10:
+                                    print(
+                                        f"SEQ02 drop outlier seq16={seq16} anchor={seq_anchor} "
+                                        f"delta={_seq16_forward_delta(seq_anchor, seq16)}"
+                                    )
+                                continue
+                        # Instrumentation for investigating possible >16-bit sequencing:
+                        # log around wrap boundaries and candidate wrap transitions with
+                        # adjacent payload bytes so we can inspect whether hidden high bytes
+                        # exist in-band.
+                        if debug and wrap_debug_lines_left > 0:
+                            near_boundary = seq16 <= 3 or seq16 >= 0xFFFC
+                            wrapped = prev_seq16_rx is not None and prev_seq16_rx > 0xF000 and seq16 < 0x1000
+                            if wrapped:
+                                wrap_events += 1
+                            if near_boundary or wrapped:
+                                probe = chunk[:8].hex()
+                                prev_s = -1 if prev_seq16_rx is None else prev_seq16_rx
+                                print(
+                                    f"SEQ02 rx_idx={rx_seq_packets} prev={prev_s} seq16={seq16} "
+                                    f"wrapped={1 if wrapped else 0} chunk0_8={probe}"
+                                )
+                                wrap_debug_lines_left -= 1
+                        prev_seq16_rx = seq16
                         prev = chunks02.get(seq16)
                         if prev is not None:
                             duplicate_seq += 1
@@ -653,7 +707,10 @@ def send_video_download_flow_item(
             if not chunks02:
                 raise RuntimeError("No D0 subtype=0x02 chunks captured for video stream")
 
-            assembled = b"".join(chunks02[k] for k in sorted(chunks02))
+            if seq_anchor is None:
+                raise RuntimeError("No D0 subtype=0x02 sequence anchor established")
+            seq_keys_ordered = _order_seq16_from_anchor(list(chunks02.keys()), seq_anchor)
+            assembled = b"".join(chunks02[k] for k in seq_keys_ordered)
             records = parse_artemis_records_strict(assembled)
             if not records:
                 raise RuntimeError("No ARTEMIS records found in subtype=0x02 assembled stream")
@@ -743,11 +800,8 @@ def send_video_download_flow_item(
 
             if debug:
                 print(f"Start play info: {start_play_info}")
-            seq_keys = sorted(chunks02)
-            missing_seq = 0
-            if seq_keys:
-                expected = seq_keys[-1] - seq_keys[0] + 1
-                missing_seq = expected - len(seq_keys)
+            seq_keys = seq_keys_ordered
+            missing_seq = _seq16_missing_from_anchor(seq_keys, seq_anchor)
             print(f"Captured subtype_02 chunks={len(chunks02)} bytes={len(assembled)}")
             print(
                 f"Parsed ver=4 records: video={v_cnt} audio={a_cnt} "
@@ -756,8 +810,11 @@ def send_video_download_flow_item(
             if debug:
                 print(
                     f"seq dupes={duplicate_seq} changed={duplicate_seq_changed} "
+                    f"seq_anchor={seq_anchor if seq_anchor is not None else -1} "
                     f"seq_range={seq_keys[0] if seq_keys else -1}-{seq_keys[-1] if seq_keys else -1} "
                     f"seq_missing={missing_seq} "
+                    f"seq_outliers_dropped={seq_outliers_dropped} "
+                    f"seq_wrap_events={wrap_events} "
                     f"dropped_sentinel_video={dropped_sentinel_video} "
                     f"out_of_session={out_of_session_records} "
                     f"pts_backwards(video/audio)={pts_backwards_video}/{pts_backwards_audio} "
