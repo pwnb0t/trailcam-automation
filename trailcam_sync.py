@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 
-from src.notify.email_notifier import EmailNotifier
 from src.sync.sync_config import create_sync_config
 from src.sync.status import SyncStatus
 from src.sync.sync_runner import SyncRunner
@@ -73,20 +72,7 @@ async def main() -> None:
         _print_status(state_store, cfg.dry_run)
         return
 
-    if cfg.app_cfg is None:
-        raise SystemExit("Internal error: app_cfg missing for non-status mode")
-    notifier = EmailNotifier(cfg.app_cfg.alerts.email)
-
-    runner = SyncRunner(
-        app_cfg=cfg.app_cfg,
-        state_store=state_store,
-        final_media_dir=cfg.final_media_dir,
-        dupes_dir=cfg.dupes_dir,
-        notifier=notifier,
-        debug=cfg.debug,
-        dry_run=cfg.dry_run,
-        stage_only=cfg.stage_only,
-    )
+    runner = SyncRunner(cfg=cfg, state_store=state_store)
     all_ok = await runner.run_all()
     if all_ok and not cfg.stage_only:
         state = state_store.load()

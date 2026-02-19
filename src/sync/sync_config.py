@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import Optional
 
 from src.config import AppConfig, load_config
+from src.notify.email_notifier import EmailNotifier
 
 
 @dataclass(frozen=True)
 class SyncConfig:
     config_path: Optional[Path]
     app_cfg: Optional[AppConfig]
+    notifier: Optional[EmailNotifier]
     state_file: Path
     final_media_dir: Path
     dupes_dir: Path
@@ -98,6 +100,7 @@ def create_sync_config(argv: Optional[list[str]] = None) -> SyncConfig:
     return SyncConfig(
         config_path=cfg_path,
         app_cfg=app_cfg,
+        notifier=EmailNotifier(app_cfg.alerts.email) if app_cfg is not None else None,
         state_file=Path(args.state_file),
         final_media_dir=final_media_dir,
         dupes_dir=dupes_dir,
@@ -106,4 +109,3 @@ def create_sync_config(argv: Optional[list[str]] = None) -> SyncConfig:
         debug=bool(args.debug),
         status=bool(args.status),
     )
-

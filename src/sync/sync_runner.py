@@ -10,10 +10,11 @@ from typing import Any, Dict, Optional
 
 from src.command.format_sd_card_command import FormatSdCardCommand
 from src.command.path_utils import camera_media_root, media_file_path
-from src.config import AppConfig, ClientConfig, PathsConfig, RunnerConfig
+from src.config import ClientConfig, PathsConfig, RunnerConfig
 from src.connection.connection import connect_and_login
 from src.flows import download_photo_to_out_item, send_video_download_flow_item
 from src.notify.email_notifier import EmailNotifier
+from src.sync.sync_config import SyncConfig
 from src.sync.manifest import build_staging_manifest, build_trailcam_manifest, compute_missing
 from src.sync.organize import organize_one
 from src.sync.status import SyncStatus
@@ -27,24 +28,20 @@ def _run_id_now() -> str:
 class SyncRunner:
     def __init__(
         self,
-        *,
-        app_cfg: AppConfig,
+        cfg: SyncConfig,
         state_store: SyncStateStore,
-        final_media_dir: Path,
-        dupes_dir: Path,
-        notifier: Optional[EmailNotifier] = None,
-        debug: bool = False,
-        dry_run: bool = False,
-        stage_only: bool = False,
     ):
-        self.app_cfg = app_cfg
+        if cfg.app_cfg is None:
+            raise ValueError("SyncRunner requires cfg.app_cfg in non-status mode")
+        self.cfg = cfg
+        self.app_cfg = cfg.app_cfg
         self.state_store = state_store
-        self.final_media_dir = Path(final_media_dir)
-        self.dupes_dir = Path(dupes_dir)
-        self.notifier = notifier
-        self.debug = bool(debug)
-        self.dry_run = bool(dry_run)
-        self.stage_only = bool(stage_only)
+        self.final_media_dir = Path(cfg.final_media_dir)
+        self.dupes_dir = Path(cfg.dupes_dir)
+        self.notifier: Optional[EmailNotifier] = cfg.notifier
+        self.debug = bool(cfg.debug)
+        self.dry_run = bool(cfg.dry_run)
+        self.stage_only = bool(cfg.stage_only)
 
     async def run_all(self) -> bool:
         aliases = sorted(self.app_cfg.cameras.keys())
