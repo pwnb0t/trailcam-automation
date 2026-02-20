@@ -148,7 +148,7 @@ def choose_timestamp(
 def final_filename(alias: str, key: MediaKey, when_local: datetime) -> str:
     ts = when_local.strftime("%Y%m%d_%H%M%S")
     ext = "mp4" if key.file_type == 1 else "jpg"
-    return f"{alias}_{ts}_{key.dir_num}-{key.media_num}.{ext}"
+    return f"{alias}_{ts}_{key.dir_num}-{int(key.media_num):04d}.{ext}"
 
 
 def organize_one(
@@ -201,4 +201,3 @@ def organize_one(
         "first_seen_at": first_seen,
         "final_ts_source": decision.ts_source,
     }
-
