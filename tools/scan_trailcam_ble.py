@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import json
+import re
 import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -39,11 +40,19 @@ def _looks_like_trailcam(name: str, service_uuids: list[str]) -> bool:
     return False
 
 
-async def run_scan(duration_s: float, rounds: int, show_all: bool) -> tuple[Dict[str, ScanHit], Dict[str, ScanHit]]:
+async def run_scan(
+    duration_s: float,
+    rounds: int,
+    show_all: bool,
+    adapter: Optional[str] = None,
+) -> tuple[Dict[str, ScanHit], Dict[str, ScanHit]]:
     found: Dict[str, ScanHit] = {}
     all_seen: Dict[str, ScanHit] = {}
     for i in range(1, rounds + 1):
-        devices = await BleakScanner.discover(timeout=duration_s, return_adv=True)
+        discover_kwargs = {"timeout": duration_s, "return_adv": True}
+        if adapter:
+            discover_kwargs["adapter"] = adapter
+        devices = await BleakScanner.discover(**discover_kwargs)
         for _key, (device, adv) in devices.items():
             address = str(device.address or "").strip()
             if not address:
@@ -152,6 +161,12 @@ async def main() -> int:
     p.add_argument("--duration", type=float, default=6.0, help="seconds per scan round (default: %(default)s)")
     p.add_argument("--rounds", type=int, default=2, help="number of rounds (default: %(default)s)")
     p.add_argument("--all", action="store_true", help="show all BLE devices, not just TrailCam-like ones")
+    p.add_argument(
+        "--adapter",
+        type=str,
+        default=None,
+        help="Bluetooth adapter to use on Linux BlueZ, e.g. hci0 or hci1",
+    )
     p.add_argument("--json", action="store_true", help="print machine-readable JSON instead of table")
     p.add_argument("--config-snippet", action="store_true", help="print cameras: YAML snippet")
     p.add_argument(
@@ -167,8 +182,16 @@ async def main() -> int:
     if args.rounds <= 0:
         print("--rounds must be > 0", file=sys.stderr)
         return 2
+    if args.adapter and not re.fullmatch(r"hci\d+", args.adapter.strip()):
+        print("--adapter must look like hciX (example: hci0)", file=sys.stderr)
+        return 2
 
-    found, all_seen = await run_scan(duration_s=float(args.duration), rounds=int(args.rounds), show_all=bool(args.all))
+    found, all_seen = await run_scan(
+        duration_s=float(args.duration),
+        rounds=int(args.rounds),
+        show_all=bool(args.all),
+        adapter=(args.adapter.strip() if args.adapter else None),
+    )
     if args.json:
         print(json.dumps([asdict(x) for x in sorted(found.values(), key=lambda v: v.address)], indent=2))
     else:
