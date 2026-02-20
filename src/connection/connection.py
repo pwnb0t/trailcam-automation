@@ -145,7 +145,10 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
 
     wifi_pwd: Optional[str] = None
     if not already_connected:
-        creds = await ble_wake_and_get_creds(camera.ble_address)
+        creds = await ble_wake_and_get_creds(
+            camera.ble_address,
+            adapter=cfg.client.bluetooth_adapter,
+        )
         ssid = str(creds.get("ssid") or "").strip()
         pwd = creds.get("pwd")
         if isinstance(pwd, str):

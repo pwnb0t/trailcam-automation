@@ -170,6 +170,7 @@ class SyncRunner:
         c = self.app_cfg.client
         return ClientConfig(
             wifi_ifname=c.wifi_ifname,
+            bluetooth_adapter=c.bluetooth_adapter,
             udp_local_port=c.udp_local_port,
             page_no=c.page_no,
             page_item_cnt=c.page_item_cnt,

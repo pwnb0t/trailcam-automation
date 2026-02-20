@@ -111,6 +111,10 @@ class CameraConfig:
 @dataclass(frozen=True)
 class ClientConfig:
     wifi_ifname: str = WIFI_IFNAME
+    # Optional BLE controller selector for BlueZ:
+    # - adapter name: hci0, hci1, ...
+    # - controller MAC: AA:BB:CC:DD:EE:FF
+    bluetooth_adapter: Optional[str] = None
     udp_local_port: int = LOCAL_PORT
 
     page_no: int = DEFAULT_PAGE_NO
@@ -188,8 +192,26 @@ def load_config(path: str | Path) -> AppConfig:
         raise ValueError("client must be a mapping")
     if "page_no" in client_raw:
         raise ValueError("client.page_no is CLI-only; remove it from config.yaml")
+    bt_adapter_raw = client_raw.get("bluetooth_adapter", None)
+    bt_adapter: Optional[str]
+    if bt_adapter_raw is None:
+        bt_adapter = None
+    else:
+        bt_s = str(bt_adapter_raw).strip()
+        if not bt_s:
+            bt_adapter = None
+        else:
+            if not re.fullmatch(r"hci\d+", bt_s, flags=re.IGNORECASE) and not re.fullmatch(
+                r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", bt_s
+            ):
+                raise ValueError(
+                    "client.bluetooth_adapter must be adapter hciX or controller MAC "
+                    "(example: hci0 or 8C:68:8B:83:07:DC)"
+                )
+            bt_adapter = bt_s
     c = ClientConfig(
         wifi_ifname=str(client_raw.get("wifi_ifname", WIFI_IFNAME)),
+        bluetooth_adapter=bt_adapter,
         udp_local_port=_must_int(client_raw.get("udp_local_port", LOCAL_PORT), "client.udp_local_port"),
         page_no=DEFAULT_PAGE_NO,
         page_item_cnt=_must_int(client_raw.get("page_item_cnt", DEFAULT_PAGE_ITEM_CNT), "client.page_item_cnt"),
@@ -486,6 +508,7 @@ def parse_config_and_args(argv: Optional[list[str]] = None) -> RunnerConfig:
     # Config-only: values are taken from app_cfg.client (constants -> yaml). No CLI flags.
     client_cfg = ClientConfig(
         wifi_ifname=str(app_cfg.client.wifi_ifname),
+        bluetooth_adapter=(str(app_cfg.client.bluetooth_adapter) if app_cfg.client.bluetooth_adapter else None),
         udp_local_port=int(app_cfg.client.udp_local_port),
         page_no=int(args.page_no),
         page_item_cnt=int(page_item_cnt),

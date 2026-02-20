@@ -12,6 +12,13 @@ cameras:
 # Client config values are used unless overridden on the CLI (where allowed).
 client:
   wifi_ifname: "wlan0"
+  # Optional: select BlueZ Bluetooth controller used for BLE wake.
+  # Accepts either adapter name (hci0/hci1/...) or controller MAC.
+  # Examples:
+  # bluetooth_adapter: "hci0"
+  # bluetooth_adapter: "8C:68:8B:83:07:DC"
+  #bluetooth_adapter: "hci0"
+  #bluetooth_adapter: "8C:68:8B:83:07:DC"
   udp_local_port: 16734
 
   page_item_cnt: 48
