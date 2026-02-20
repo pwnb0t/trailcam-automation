@@ -289,6 +289,8 @@ class SyncRunner:
                 final_root=self.final_media_dir,
                 dupes_root=self.dupes_dir,
                 run_id=run_id,
+                week_boundary_weekday=int(self.app_cfg.organize.week_boundary_weekday),
+                week_boundary_hour_local=int(self.app_cfg.organize.week_boundary_hour_local),
             )
             organized[skey] = res
             self.state_store.save(state)

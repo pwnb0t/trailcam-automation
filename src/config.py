@@ -92,6 +92,7 @@ class AppConfig:
     cameras: Dict[str, CameraConfig]
     client: ClientConfig
     paths: PathsConfig
+    organize: OrganizeConfig = field(default_factory=lambda: OrganizeConfig())
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
 
     def get_camera(self, alias: str) -> CameraConfig:
@@ -134,6 +135,13 @@ class PathsConfig:
     staging_dir: str = "out/media"
     tmp_dir: str = "out/tmp"
     final_media_dir: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class OrganizeConfig:
+    # 0=Monday .. 6=Sunday
+    week_boundary_weekday: int = 6
+    week_boundary_hour_local: int = 8
 
 
 @dataclass(frozen=True)
@@ -238,6 +246,38 @@ def load_config(path: str | Path) -> AppConfig:
         final_media_dir=(str(paths_raw["final_media_dir"]) if "final_media_dir" in paths_raw else None),
     )
 
+    organize_raw = raw.get("organize") or {}
+    if organize_raw and not isinstance(organize_raw, dict):
+        raise ValueError("organize must be a mapping")
+    weekday_raw = str(organize_raw.get("week_boundary_weekday", "sunday")).strip().lower()
+    weekday_map = {
+        "monday": 0,
+        "mon": 0,
+        "tuesday": 1,
+        "tue": 1,
+        "wednesday": 2,
+        "wed": 2,
+        "thursday": 3,
+        "thu": 3,
+        "friday": 4,
+        "fri": 4,
+        "saturday": 5,
+        "sat": 5,
+        "sunday": 6,
+        "sun": 6,
+    }
+    if weekday_raw not in weekday_map:
+        raise ValueError("organize.week_boundary_weekday must be weekday name (e.g. sunday)")
+    week_boundary_hour_local = _must_int(
+        organize_raw.get("week_boundary_hour_local", 8), "organize.week_boundary_hour_local"
+    )
+    if week_boundary_hour_local < 0 or week_boundary_hour_local > 23:
+        raise ValueError("organize.week_boundary_hour_local must be 0..23")
+    organize_cfg = OrganizeConfig(
+        week_boundary_weekday=weekday_map[weekday_raw],
+        week_boundary_hour_local=week_boundary_hour_local,
+    )
+
     alerts_raw = raw.get("alerts") or {}
     if alerts_raw and not isinstance(alerts_raw, dict):
         raise ValueError("alerts must be a mapping")
@@ -267,7 +307,14 @@ def load_config(path: str | Path) -> AppConfig:
     )
     alerts_cfg = AlertsConfig(email=email_cfg)
 
-    return AppConfig(version=ver, cameras=cams, client=c, paths=paths, alerts=alerts_cfg)
+    return AppConfig(
+        version=ver,
+        cameras=cams,
+        client=c,
+        paths=paths,
+        organize=organize_cfg,
+        alerts=alerts_cfg,
+    )
 
 
 def _default_staging_dir() -> str:

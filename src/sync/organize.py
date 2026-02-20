@@ -85,12 +85,13 @@ def _parse_iso_utc(s: str) -> Optional[datetime]:
         return None
 
 
-def _week_bucket_label(dt_local: datetime) -> str:
-    # Week boundary: Sunday 08:00 local.
-    # If we are before this week's Sunday 08:00, bucket as previous week.
-    days_since_sunday = (dt_local.weekday() + 1) % 7
-    sunday = (dt_local - timedelta(days=days_since_sunday)).replace(hour=8, minute=0, second=0, microsecond=0)
-    anchor = dt_local if dt_local >= sunday else (dt_local - timedelta(days=7))
+def _week_bucket_label(dt_local: datetime, *, boundary_weekday: int, boundary_hour_local: int) -> str:
+    # Week boundary is configurable (defaults: Sunday 08:00 local).
+    days_since_boundary = (dt_local.weekday() - int(boundary_weekday)) % 7
+    boundary = (dt_local - timedelta(days=days_since_boundary)).replace(
+        hour=int(boundary_hour_local), minute=0, second=0, microsecond=0
+    )
+    anchor = dt_local if dt_local >= boundary else (dt_local - timedelta(days=7))
     iso = anchor.isocalendar()
     return f"{iso.year:04d}-{iso.week:02d}"
 
@@ -161,6 +162,8 @@ def organize_one(
     final_root: Path,
     dupes_root: Path,
     run_id: str,
+    week_boundary_weekday: int = 6,
+    week_boundary_hour_local: int = 8,
 ) -> Dict[str, Any]:
     decision, first_seen = choose_timestamp(
         key=key,
@@ -168,7 +171,11 @@ def organize_one(
         staged_path=staged_path,
         first_seen_at=first_seen_at,
     )
-    bucket = _week_bucket_label(decision.when_local)
+    bucket = _week_bucket_label(
+        decision.when_local,
+        boundary_weekday=int(week_boundary_weekday),
+        boundary_hour_local=int(week_boundary_hour_local),
+    )
     dst_dir = final_root / bucket
     dst_dir.mkdir(parents=True, exist_ok=True)
     dst = dst_dir / final_filename(alias, key, decision.when_local)

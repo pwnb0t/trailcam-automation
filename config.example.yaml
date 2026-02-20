@@ -38,6 +38,12 @@ paths:
   final_media_dir: "/mnt/trailcam/media"
   tmp_dir: "out/tmp"
 
+organize:
+  # Week bucket boundary for final_media_dir/YYYY-WW assignment.
+  # 0=Monday..6=Sunday internally; config accepts weekday name.
+  week_boundary_weekday: "sunday"
+  week_boundary_hour_local: 8
+
 alerts:
   email:
     enabled: false
