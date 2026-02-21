@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
 from src.sync.sync_config import create_sync_config
 from src.sync.status import SyncStatus
@@ -32,15 +37,82 @@ def _next_step_for_status(status: str, dry_run: bool) -> str:
     return "unknown status; inspect state file and rerun sync"
 
 
+def _run_cmd(argv: list[str], timeout_s: float = 8.0) -> tuple[int, str]:
+    try:
+        p = subprocess.run(argv, text=True, capture_output=True, timeout=timeout_s)
+    except Exception as e:
+        return 1, f"{' '.join(argv)} failed: {e}"
+    out = (p.stdout or "").strip()
+    err = (p.stderr or "").strip()
+    txt = out if out else err
+    return p.returncode, txt
+
+
+def _print_systemd_sync_status() -> None:
+    print("Systemd units:")
+    rc, _ = _run_cmd(["systemctl", "--version"])
+    if rc != 0:
+        print("- systemctl not available on this host")
+        return
+
+    for unit in ("trailcam-sync.service", "trailcam-sync.timer"):
+        rc, out = _run_cmd(["systemctl", "status", unit, "--no-pager", "-l"], timeout_s=10.0)
+        print("")
+        print(f"[{unit}]")
+        if rc != 0 and ("could not be found" in out.lower() or "not-found" in out.lower()):
+            print("not installed")
+            continue
+        print(out or "(no output)")
+
+
+def _latest_sync_from_rotated_state(state_path: Path) -> tuple[Optional[datetime], Optional[Path]]:
+    parent = state_path.parent
+    stem = state_path.stem
+    suffix = state_path.suffix
+    pat = re.compile(rf"^{re.escape(stem)}\.(\d{{8}}_\d{{6}})(?:\.\d+)?{re.escape(suffix)}$")
+
+    best_dt: Optional[datetime] = None
+    best_path: Optional[Path] = None
+    for p in parent.glob(f"{stem}.*{suffix}"):
+        m = pat.match(p.name)
+        if not m:
+            continue
+        try:
+            dt = datetime.strptime(m.group(1), "%Y%m%d_%H%M%S")
+        except Exception:
+            continue
+        if best_dt is None or dt > best_dt:
+            best_dt = dt
+            best_path = p
+    return best_dt, best_path
+
+
 def _print_status(state_store: SyncStateStore, dry_run: bool) -> None:
+    _print_systemd_sync_status()
+    print("")
+
     state_path = state_store.path
     if not state_path.exists():
         print(f"No state file found at: {state_path}")
+        last_dt, last_path = _latest_sync_from_rotated_state(state_path)
+        if last_dt is not None and last_path is not None:
+            print(f"Latest completed sync: {last_dt.strftime('%Y-%m-%d %H:%M:%S')} ({last_path})")
         print("Current state: not started")
         print("Next step: run trailcam_sync.py to start a new sync run.")
         return
 
-    state = state_store.load()
+    try:
+        state = state_store.load()
+    except Exception as e:
+        print(f"State file is invalid: {state_path}")
+        print(f"Error: {e}")
+        last_dt, last_path = _latest_sync_from_rotated_state(state_path)
+        if last_dt is not None and last_path is not None:
+            print(f"Latest completed sync: {last_dt.strftime('%Y-%m-%d %H:%M:%S')} ({last_path})")
+        else:
+            print("Latest completed sync: (none found)")
+        return
+
     print(f"State file: {state_path}")
     print(f"Version: {state.get('version', 'unknown')}")
     print(f"Last run id: {state.get('run_id_last') or '(none)'}")

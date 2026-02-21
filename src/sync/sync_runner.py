@@ -291,6 +291,7 @@ class SyncRunner:
                 run_id=run_id,
                 week_boundary_weekday=int(self.app_cfg.organize.week_boundary_weekday),
                 week_boundary_hour_local=int(self.app_cfg.organize.week_boundary_hour_local),
+                media_time_mode=str(self.app_cfg.organize.media_time_mode),
             )
             organized[skey] = res
             self.state_store.save(state)
