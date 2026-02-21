@@ -118,3 +118,18 @@ Show current sync state and next action:
 ```bash
 python3 trailcam_sync.py --status
 ```
+
+# Automated Daily Sync (systemd)
+
+Install the timer/service from this repo:
+```bash
+./scripts/install_systemd_sync.sh
+```
+
+This schedules `trailcam_sync.py` daily at 08:00 local time (`trailcam-sync.timer`).
+
+Check timer status:
+```bash
+systemctl status trailcam-sync.timer
+systemctl list-timers trailcam-sync.timer --all
+```

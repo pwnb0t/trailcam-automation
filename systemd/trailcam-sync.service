@@ -1,0 +1,20 @@
+[Unit]
+Description=TrailCam Sync Run
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pwnb0t
+Group=pwnb0t
+WorkingDirectory=/home/pwnb0t/trailcam-automation
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pwnb0t/trailcam-automation/scripts/run_sync.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=6h
+
+[Install]
+WantedBy=multi-user.target
+
