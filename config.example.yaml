@@ -40,7 +40,7 @@ organize:
   # Week bucket boundary for final_media_dir/YYYY-WW assignment.
   # 0=Monday..6=Sunday internally; config accepts weekday name.
   week_boundary_weekday: "sunday"
-  week_boundary_hour_local: 8
+  week_boundary_hour_local: 11
   # Camera mediaTime interpretation:
   # - local_epoch: camera encodes local wall-clock in epoch-like integer (TrailCam default)
   # - utc_epoch: standard unix epoch in UTC
