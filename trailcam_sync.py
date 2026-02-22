@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.sync.sync_config import create_sync_config
+from src.sync.hardware_check import check_required_hardware
 from src.sync.status import SyncStatus
 from src.sync.sync_runner import SyncRunner
 from src.sync.sync_state import SyncStateStore
@@ -143,6 +144,7 @@ async def main() -> None:
     if cfg.status:
         _print_status(state_store, cfg.dry_run)
         return
+    check_required_hardware(cfg)
 
     runner = SyncRunner(cfg=cfg, state_store=state_store)
     all_ok = await runner.run_all()

@@ -8,10 +8,15 @@ from src.command.format_sd_card_command import FormatSdCardCommand
 from src.command.list_media_all_command import ListMediaAllCommand
 from src.command.list_media_page_command import ListMediaPageCommand
 from src.config import parse_config_and_args
+from src.sync.hardware_check import RequiredHardwareChecker
 
 
 async def main():
     cfg = parse_config_and_args()
+    RequiredHardwareChecker(
+        wifi_ifname=cfg.client.wifi_ifname,
+        bluetooth_adapter=cfg.client.bluetooth_adapter,
+    ).check()
     session = await connect_and_login(cfg)
     print(f"Camera addr: {session.client.camera_addr}")
     print(f"Login token: {session.login_token_u32}")
