@@ -17,10 +17,11 @@
 - Regression tests added for this behavior and sequence/ACK helpers.
 
 ## Next Steps
-1. Add fixture-based tests for `_parse_artemis_v4_payload_header()` (offset-16 and offset-20 cases, invalid cases).
-2. Add offline pcap regression fixtures for one photo and one video parsing path.
-3. Add CLI/config precedence tests (defaults < config.yaml < CLI).
-4. Harden sync-run observability:
+1. Redesign and re-implement scheduling/service orchestration (single-service model) for automatic retries after failures.
+2. Add fixture-based tests for `_parse_artemis_v4_payload_header()` (offset-16 and offset-20 cases, invalid cases).
+3. Add offline pcap regression fixtures for one photo and one video parsing path.
+4. Add CLI/config precedence tests (defaults < config.yaml < CLI).
+5. Harden sync-run observability:
    - progress lines during long list/download phases
    - clearer failure summaries for retries/timeouts.
 
