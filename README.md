@@ -118,3 +118,26 @@ Show current sync state and next action:
 ```bash
 python3 trailcam_sync.py --status
 ```
+
+# Automated Daily Sync (single service/timer)
+
+Install the unit files from this repo:
+```bash
+./scripts/install_systemd_sync.sh
+```
+
+Scheduling model:
+- One timer: `trailcam-sync.timer` at `11:00` local time (`RandomizedDelaySec=5m`).
+- One service: `trailcam-sync.service`.
+- Retries happen inside `scripts/run_sync.sh` (same invocation, no second timer/service).
+
+Default in-process retry policy (set in service environment):
+- `TRAILCAM_SYNC_MAX_ATTEMPTS=3`
+- `TRAILCAM_SYNC_RETRY_DELAY_S=900` (15 minutes)
+
+Check status:
+```bash
+systemctl status trailcam-sync.timer
+systemctl status trailcam-sync.service
+systemctl list-timers trailcam-sync.timer --all
+```

@@ -154,6 +154,8 @@ async def main() -> None:
         rotated = state_store.rotate_if_exists(suffix=run_id)
         if rotated is not None:
             print(f"Run successful. Rotated state file to: {rotated}")
+    if not all_ok:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

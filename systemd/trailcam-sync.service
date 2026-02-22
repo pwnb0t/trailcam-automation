@@ -1,0 +1,23 @@
+[Unit]
+Description=TrailCam Sync Run (Scheduled + In-Process Retries)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pwnb0t
+Group=pwnb0t
+WorkingDirectory=/home/pwnb0t/trailcam-automation
+Environment=PYTHONUNBUFFERED=1
+# Retry policy for one timer-triggered invocation.
+Environment=TRAILCAM_SYNC_MAX_ATTEMPTS=3
+Environment=TRAILCAM_SYNC_RETRY_DELAY_S=900
+ExecStart=/home/pwnb0t/trailcam-automation/scripts/run_sync.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=8h
+
+[Install]
+WantedBy=multi-user.target
+

@@ -17,7 +17,7 @@
 - Regression tests added for this behavior and sequence/ACK helpers.
 
 ## Next Steps
-1. Redesign and re-implement scheduling/service orchestration (single-service model) for automatic retries after failures.
+1. Validate/tune single-service retry policy (attempt count/delay) from real-world failure runs.
 2. Add fixture-based tests for `_parse_artemis_v4_payload_header()` (offset-16 and offset-20 cases, invalid cases).
 3. Add offline pcap regression fixtures for one photo and one video parsing path.
 4. Add CLI/config precedence tests (defaults < config.yaml < CLI).
