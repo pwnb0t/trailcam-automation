@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import time
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from src.connection.ble import ble_wake_and_get_creds
@@ -11,6 +12,12 @@ from src.constants import CAMERA_IP, CAMERA_PASSWORD, CAMERA_USERNAME
 from src.protocol import make_ack_body_seq_list16, unpack_f1
 from src.config import RunnerConfig
 from src.session import TrailCamSession
+
+
+def _camera_login_time_local_epoch() -> int:
+    """Local wall-clock encoded as epoch-like seconds for camera login."""
+    local_now = datetime.now().astimezone()
+    return int(local_now.replace(tzinfo=timezone.utc).timestamp())
 
 
 def nmcli_rescan() -> None:
@@ -113,7 +120,7 @@ def login_and_get_session_info(
         "password": CAMERA_PASSWORD,
         "needVideo": 0,
         "needAudio": 0,
-        "utcTime": int(time.time()),
+        "utcTime": _camera_login_time_local_epoch(),
         "supportHeartBeat": True,
     }
     for _ in range(retries):
