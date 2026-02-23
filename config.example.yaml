@@ -51,9 +51,14 @@ alerts:
     enabled: false
     smtp_host: "smtp.gmail.com"
     smtp_port: 587
-    smtp_user: "your@gmail.com"
-    smtp_app_password: "${TRAILCAM_GMAIL_APP_PASSWORD}"
-    from_email: "your@gmail.com"
+    # Prefer env injection (ex: 1Password op run):
+    #   SMTP_USER
+    #   SMTP_APP_PASSWORD
+    #   SMTP_FROM_EMAIL
+    #   SMTP_TO_EMAILS (comma-separated)
+    smtp_user: ""
+    smtp_app_password: ""
+    from_email: ""
     to_emails:
       - "you@example.com"
     subject_prefix: "[TrailCam Sync]"
