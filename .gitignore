@@ -8,3 +8,4 @@ apk/apk_unzip_v2/
 apk/apk_unzip_v2_armeabi/
 apk/extracted_v2/
 apk/jadx_full_v2/
+scripts/sync.sh

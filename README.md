@@ -130,16 +130,27 @@ Scheduling model:
 - One timer: `trailcam-sync.timer` at `11:00` local time (`RandomizedDelaySec=5m`).
 - One service: `trailcam-sync.service`.
 - Retries happen inside `scripts/run_sync.sh` (same invocation, no second timer/service).
+- `scripts/run_sync.sh` executes:
+  - `scripts/sync.sh` when present (local override), otherwise
+  - `scripts/sync.example.sh`.
 
 Default in-process retry policy (set in service environment):
 - `TRAILCAM_SYNC_MAX_ATTEMPTS=3`
 - `TRAILCAM_SYNC_RETRY_DELAY_S=900` (15 minutes)
 
 1Password/env-backed secrets for sync/email:
-- `scripts/run_sync.sh` will use `op run --env-file "$TRAILCAM_OP_ENV_FILE"` when:
-  - `op` CLI is installed, and
-  - env file exists (default: `~/.config/openclaw/op.env`).
-- If no env file is present, it falls back to plain execution.
+- `scripts/sync.example.sh` runs plain `trailcam_sync.py` (no `op` wrapper).
+- To use 1Password/env injection, create `scripts/sync.sh` and run sync through `op`, for example:
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="/home/pwnb0t/trailcam-automation"
+CONFIG_PATH="${TRAILCAM_CONFIG:-$ROOT_DIR/config.yaml}"
+OP_ENV_FILE="${TRAILCAM_OP_ENV_FILE:-$HOME/.config/openclaw/op.env}"
+cd "$ROOT_DIR"
+op run --env-file "$OP_ENV_FILE" -- /usr/bin/env python3 trailcam_sync.py --config "$CONFIG_PATH"
+```
+- `scripts/sync.sh` is gitignored so local secrets/workflow stay local.
 - SMTP settings can be injected via env vars:
   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_TO_EMAILS`, `SMTP_STARTTLS`
 

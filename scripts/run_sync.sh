@@ -5,7 +5,8 @@ ROOT_DIR="/home/pwnb0t/trailcam-automation"
 CONFIG_PATH="${TRAILCAM_CONFIG:-$ROOT_DIR/config.yaml}"
 LOCK_PATH="$ROOT_DIR/out/state/trailcam-sync.lock"
 LOG_DIR="$ROOT_DIR/out/logs"
-OP_ENV_FILE="${TRAILCAM_OP_ENV_FILE:-$HOME/.config/openclaw/op.env}"
+SYNC_OVERRIDE="$ROOT_DIR/scripts/sync.sh"
+SYNC_FALLBACK="$ROOT_DIR/scripts/sync.example.sh"
 
 # Retry policy for one scheduled run.
 MAX_ATTEMPTS="${TRAILCAM_SYNC_MAX_ATTEMPTS:-3}"
@@ -34,20 +35,18 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
   ts="$(date -Is)"
   echo "[$ts] trailcam sync attempt $attempt/$MAX_ATTEMPTS"
 
-  if [ -f "$OP_ENV_FILE" ] && command -v op >/dev/null 2>&1; then
-    # Some environments require OP_SERVICE_ACCOUNT_TOKEN to be exported before `op run`.
-    if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-      token_line="$(grep -m1 '^OP_SERVICE_ACCOUNT_TOKEN=' "$OP_ENV_FILE" || true)"
-      if [ -n "$token_line" ]; then
-        export OP_SERVICE_ACCOUNT_TOKEN="${token_line#*=}"
-      fi
-    fi
-    op run --env-file "$OP_ENV_FILE" -- /usr/bin/env python3 trailcam_sync.py --config "$CONFIG_PATH"
-    rc=$?
+  if [ -f "$SYNC_OVERRIDE" ]; then
+    SYNC_SCRIPT="$SYNC_OVERRIDE"
   else
-    /usr/bin/env python3 trailcam_sync.py --config "$CONFIG_PATH"
-    rc=$?
+    SYNC_SCRIPT="$SYNC_FALLBACK"
   fi
+  if [ ! -f "$SYNC_SCRIPT" ]; then
+    echo "sync launcher not found: $SYNC_SCRIPT" >&2
+    exit 2
+  fi
+
+  TRAILCAM_CONFIG="$CONFIG_PATH" /usr/bin/env bash "$SYNC_SCRIPT"
+  rc=$?
   if [ "$rc" -eq 0 ]; then
     ts="$(date -Is)"
     echo "[$ts] trailcam sync succeeded on attempt $attempt/$MAX_ATTEMPTS"
