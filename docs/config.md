@@ -24,8 +24,9 @@ See `config.example.yaml` (you can name your real file `config.yaml` or `config.
 - Optional failure email alerts under `alerts.email`:
   - Set `enabled: true`
   - Configure SMTP fields (`smtp_host`, `smtp_port`, `smtp_user`, `from_email`, `to_emails`)
-  - For Gmail app password, use env var reference:
-    - `smtp_app_password: "${TRAILCAM_GMAIL_APP_PASSWORD}"`
+  - `send_email.py` supports env overrides (env wins over YAML):
+    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_TO_EMAILS`, `SMTP_STARTTLS`
+  - Recommended: keep SMTP secrets out of YAML and inject via 1Password (`op://...`) + `op run --env-file ...`.
   - Current behavior: sends on sync camera failures when `notify_on` includes `failure`.
 
 ## Notes

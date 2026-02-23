@@ -135,6 +135,14 @@ Default in-process retry policy (set in service environment):
 - `TRAILCAM_SYNC_MAX_ATTEMPTS=3`
 - `TRAILCAM_SYNC_RETRY_DELAY_S=900` (15 minutes)
 
+1Password/env-backed secrets for sync/email:
+- `scripts/run_sync.sh` will use `op run --env-file "$TRAILCAM_OP_ENV_FILE"` when:
+  - `op` CLI is installed, and
+  - env file exists (default: `~/.config/openclaw/op.env`).
+- If no env file is present, it falls back to plain execution.
+- SMTP settings can be injected via env vars:
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_TO_EMAILS`, `SMTP_STARTTLS`
+
 Check status:
 ```bash
 systemctl status trailcam-sync.timer
