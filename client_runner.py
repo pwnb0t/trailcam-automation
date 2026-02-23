@@ -20,6 +20,10 @@ async def main():
     session = await connect_and_login(cfg)
     print(f"Camera addr: {session.client.camera_addr}")
     print(f"Login token: {session.login_token_u32}")
+    if session.battery_percent is None:
+        print("Battery percent: unknown")
+    else:
+        print(f"Battery percent: {session.battery_percent}%")
 
     if cfg.op == "login_only":
         return

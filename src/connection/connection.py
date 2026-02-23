@@ -104,7 +104,9 @@ def handshake_prelude(client: TrailCamClient, debug: bool = False, duration_s: f
         print("Handshake opcodes seen:", {hex(k): v for k, v in seen_ops.items()})
 
 
-def login_and_get_token(client: TrailCamClient, timeout_s: float = 5.0, retries: int = 3) -> Optional[int]:
+def login_and_get_session_info(
+    client: TrailCamClient, timeout_s: float = 5.0, retries: int = 3
+) -> tuple[Optional[int], Optional[int]]:
     login_obj = {
         "cmdId": 0,
         "usrName": CAMERA_USERNAME,
@@ -127,8 +129,14 @@ def login_and_get_token(client: TrailCamClient, timeout_s: float = 5.0, retries:
             objs = client.handle_incoming_payload(data)
             for obj in objs:
                 if obj.get("cmdId") == 0 and "token" in obj:
-                    return int(obj["token"])
-    return None
+                    battery_percent: Optional[int] = None
+                    if "bat_percent" in obj:
+                        try:
+                            battery_percent = int(obj["bat_percent"])
+                        except Exception:
+                            battery_percent = None
+                    return int(obj["token"]), battery_percent
+    return None, None
 
 
 async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
@@ -187,7 +195,7 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
         client.learn_camera_port()
         client.start_keepalive(interval_s=1.0)
         handshake_prelude(client, debug=cfg.debug, duration_s=3.0)
-        token = login_and_get_token(client)
+        token, battery_percent = login_and_get_session_info(client)
         if token is None:
             raise RuntimeError("Login token not found")
         client.token_int = token
@@ -196,6 +204,7 @@ async def connect_and_login(cfg: RunnerConfig) -> TrailCamSession:
             client=client,
             login_token_u32=token,
             wifi_ssid=ssid_expected,
+            battery_percent=battery_percent,
             wifi_pwd=wifi_pwd,
         )
     except Exception:

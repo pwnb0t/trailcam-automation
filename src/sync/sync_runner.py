@@ -84,6 +84,11 @@ class SyncRunner:
         print(f"[{alias}] connect/login ...")
         session = await connect_and_login(cfg)
         try:
+            cam_state["battery_percent"] = session.battery_percent
+            if session.battery_percent is None:
+                print(f"[{alias}] battery_percent=unknown")
+            else:
+                print(f"[{alias}] battery_percent={session.battery_percent}")
             cam_state["status"] = SyncStatus.DOWNLOAD.value
             self.state_store.save(state)
 

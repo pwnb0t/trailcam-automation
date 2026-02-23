@@ -20,4 +20,5 @@ class TrailCamSession:
     client: TrailCamClient
     login_token_u32: int
     wifi_ssid: str
+    battery_percent: Optional[int] = None
     wifi_pwd: Optional[str] = None
