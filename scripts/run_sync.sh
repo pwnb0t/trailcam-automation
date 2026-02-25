@@ -10,7 +10,7 @@ SYNC_FALLBACK="$ROOT_DIR/scripts/sync.example.sh"
 
 # Retry policy for one scheduled run.
 MAX_ATTEMPTS="${TRAILCAM_SYNC_MAX_ATTEMPTS:-3}"
-RETRY_DELAY_S="${TRAILCAM_SYNC_RETRY_DELAY_S:-900}"
+RETRY_DELAY_S="${TRAILCAM_SYNC_RETRY_DELAY_S:-300}"
 
 mkdir -p "$(dirname "$LOCK_PATH")" "$LOG_DIR"
 cd "$ROOT_DIR"
