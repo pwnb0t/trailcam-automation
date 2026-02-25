@@ -22,7 +22,8 @@ from src.sync.sync_state import MediaKey, SyncStateStore
 
 
 def _run_id_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    # Use local wall-clock time for operator-facing run IDs / rotated state filenames.
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 class SyncRunner:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -62,7 +62,7 @@ class SyncStateStore:
         """
         if not self.path.exists():
             return None
-        stamp = suffix or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        stamp = suffix or datetime.now().strftime("%Y%m%d_%H%M%S")
         base = self.path.with_name(f"{self.path.stem}.{stamp}{self.path.suffix}")
         dst = base
         n = 1
