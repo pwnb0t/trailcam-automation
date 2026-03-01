@@ -1,30 +1,15 @@
 # TrailCam Automation Status
 
-## Current State
-- BLE wake + AP credential retrieval works (`ssid`/`pwd`).
-- Wi-Fi join + UDP handshake + login works (`login_token_u32`).
-- Media listing works (`cmdId=768`) for page and all-pages modes.
-- Photo download works (`cmdId=1285`, `D0 subtype=0x03`).
-- Video download works (`cmdId=769/770`, `D0 subtype=0x02`, ver=4 decrypt).
-- Delete/format operations are reverse engineered (`cmdId=773`, `cmdId=518`).
-- `client_runner.py` and `trailcam_sync.py` are both functional entrypoints.
+## Current Snapshot
+- Daily systemd timer runs around **11:03 local** on both hosts: `petepad` and `piiter`.
+- Sync pipeline is generally healthy and media lands on NAS in organized structure.
+- Main-session noon check is active as a temporary operational safety net.
 
-## Recently Fixed
-- Video corruption/jump/repeat issue root cause identified and fixed.
-- Fix: ver=4 media decrypt now matches native behavior exactly:
-  - decrypt `0x60` bytes per `0x1000` page only when remaining bytes `> 0x5f`
-  - no partial tail-page decrypt
-- Regression tests added for this behavior and sequence/ACK helpers.
+## Known Operational Behavior
+- Sync can fail intermittently on individual photo/video downloads.
+- Most intermittent failures clear on retry (same run or subsequent run).
+- Current failure alerting is too noisy for normal transient failures.
 
-## Next Steps
-1. Validate/tune single-service retry policy (attempt count/delay) from real-world failure runs.
-2. Add fixture-based tests for `_parse_artemis_v4_payload_header()` (offset-16 and offset-20 cases, invalid cases).
-3. Add offline pcap regression fixtures for one photo and one video parsing path.
-4. Add CLI/config precedence tests (defaults < config.yaml < CLI).
-5. Harden sync-run observability:
-   - progress lines during long list/download phases
-   - clearer failure summaries for retries/timeouts.
-
-## Operational Goal
-- Daily or periodic sync from all configured trailcams.
-- Download media to staging, organize onto NAS, then clear camera media after successful verification.
+## Intent
+- Keep this file high-signal and operational only.
+- Track implementation work in `TODO.md`.
