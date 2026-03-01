@@ -31,3 +31,9 @@
 ## 4) Ops stopgap retirement plan
 - [ ] Keep noon status check while retry/alerting is being improved.
 - [ ] Remove or reduce noon check once terminal-failure-only alerting is reliable.
+
+## 5) Final media naming: datetime-first + camera suffix
+- [ ] Change final filename format to: `YYYY-MM-DD_HH-MM-SS_<back|front>.<ext>`.
+- [ ] Ensure lexicographic sort matches chronological order across all final media.
+- [ ] Remove `dirNum` and `mediaNum` from final filenames (no longer needed in organized output).
+- [ ] Place camera alias at the end of basename so date/time stays first for sorting.
