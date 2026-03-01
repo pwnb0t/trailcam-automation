@@ -90,13 +90,26 @@ def _parse_iso_utc(s: str) -> Optional[datetime]:
 
 
 def _week_bucket_label(dt_local: datetime, *, boundary_weekday: int, boundary_hour_local: int) -> str:
-    # Week boundary is configurable (defaults: Sunday 08:00 local).
-    days_since_boundary = (dt_local.weekday() - int(boundary_weekday)) % 7
-    boundary = (dt_local - timedelta(days=days_since_boundary)).replace(
-        hour=int(boundary_hour_local), minute=0, second=0, microsecond=0
-    )
-    anchor = dt_local if dt_local >= boundary else (dt_local - timedelta(days=7))
-    iso = anchor.isocalendar()
+    # Buckets are ISO year-week labels, but with a configurable rollover moment.
+    # Before rollover on the boundary weekday, keep the current ISO week.
+    # At/after rollover on the boundary weekday, advance to the *next* ISO week.
+    #
+    # Example with Sunday 11:00:
+    # - Sun 10:59 -> current ISO week
+    # - Sun 11:00+ -> next ISO week
+    wkday = dt_local.weekday()
+    shifted = dt_local
+
+    if wkday == int(boundary_weekday):
+        boundary = dt_local.replace(hour=int(boundary_hour_local), minute=0, second=0, microsecond=0)
+        if dt_local >= boundary:
+            # Advance to next Monday so isocalendar() reports the next ISO week.
+            days_to_next_monday = (7 - wkday) % 7
+            if days_to_next_monday == 0:
+                days_to_next_monday = 7
+            shifted = dt_local + timedelta(days=days_to_next_monday)
+
+    iso = shifted.isocalendar()
     return f"{iso.year:04d}-{iso.week:02d}"
 
 
