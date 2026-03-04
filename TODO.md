@@ -13,12 +13,6 @@
 ## 3) Retry/failure observability and stats
 - Add per-host retry metrics (`petepad`, `piiter`).
 
-## 5) Final media naming: datetime-first + camera suffix
-- [ ] Change final filename format to: `YYYY-MM-DD_HH-MM-SS_<back|front>.<ext>`.
-- [ ] Ensure lexicographic sort matches chronological order across all final media.
-- [ ] Remove `dirNum` and `mediaNum` from final filenames (no longer needed in organized output).
-- [ ] Place camera alias at the end of basename so date/time stays first for sorting.
-
 
 -----
 
