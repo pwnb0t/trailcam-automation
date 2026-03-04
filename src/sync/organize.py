@@ -165,9 +165,9 @@ def choose_timestamp(
 
 
 def final_filename(alias: str, key: MediaKey, when_local: datetime) -> str:
-    ts = when_local.strftime("%Y%m%d_%H%M%S")
+    ts = when_local.strftime("%Y-%m-%d_%H-%M-%S")
     ext = "mp4" if key.file_type == 1 else "jpg"
-    return f"{alias}_{ts}_{key.dir_num}-{int(key.media_num):04d}.{ext}"
+    return f"{ts}_{alias}.{ext}"
 
 
 def organize_one(
