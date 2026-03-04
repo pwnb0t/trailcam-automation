@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="/home/pwnb0t/trailcam-automation"
+ROOT_DIR="/home/pwnb0t/g/trailcam-automation"
 UNIT_DIR="/etc/systemd/system"
 
 sudo install -m 0644 "$ROOT_DIR/systemd/trailcam-sync.service" "$UNIT_DIR/trailcam-sync.service"

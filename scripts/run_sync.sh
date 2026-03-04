@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-ROOT_DIR="/home/pwnb0t/trailcam-automation"
+ROOT_DIR="/home/pwnb0t/g/trailcam-automation"
 CONFIG_PATH="${TRAILCAM_CONFIG:-$ROOT_DIR/config.yaml}"
 LOCK_PATH="$ROOT_DIR/out/state/trailcam-sync.lock"
 LOG_DIR="$ROOT_DIR/out/logs"

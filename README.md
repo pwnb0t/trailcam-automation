@@ -144,7 +144,7 @@ Default in-process retry policy (set in service environment):
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT_DIR="/home/pwnb0t/trailcam-automation"
+ROOT_DIR="/home/pwnb0t/g/trailcam-automation"
 CONFIG_PATH="${TRAILCAM_CONFIG:-$ROOT_DIR/config.yaml}"
 OP_ENV_FILE="${TRAILCAM_OP_ENV_FILE:-$HOME/.config/openclaw/op.env}"
 cd "$ROOT_DIR"
