@@ -1,6 +1,92 @@
 # TrailCam Automation TODO
 
 
+# In progress refactor of src/flows.py (item 1)
+
+Phased execution plan
+
+ ### Phase 0 — safety net first (done)
+
+ 1. Add/confirm tests around current behavior used by sync path:
+ - media list normalization
+ - video header/decrypt helpers
+ - any current pcap regression tests
+ 2. Snapshot current signatures used by callers (sync_runner, command modules).
+
+ Exit criteria: tests green before refactor.
+
+ ────────────────────────────────────────────────────────────────────────────────
+
+ ### Phase 1 — mechanical split (no behavior change) (done)
+
+ 1. Create src/flows/ package.
+ 2. Move code in chunks:
+ - list/normalize helpers → media_list.py
+ - photo flow function(s) → photo_download.py
+ - video flow function(s) + internal helpers → video_download.py
+ - extraction helpers → extract.py
+ 3. Keep compatibility:
+ - src/flows/__init__.py re-exports old function names.
+ - keep src/flows.py as a thin shim import/re-export during transition (optional but safest).
+
+ Exit criteria: all existing imports still work; tests unchanged and green.
+
+ ────────────────────────────────────────────────────────────────────────────────
+
+ ### Phase 2 — untangle internal coupling (done)
+
+ 1. Move shared constants/helpers into common.py.
+ 2. Reduce cross-imports between video/photo modules.
+ 3. Isolate stream-state structures (ack counters, seq windows) into small dataclasses.
+
+ Exit criteria: no circular imports, cleaner boundaries, behavior same.
+
+ ────────────────────────────────────────────────────────────────────────────────
+
+ ### Phase 3 — caller cleanup
+
+ 1. Update callers to import from new package paths directly.
+ 2. Remove shim (src/flows.py) once all callsites are migrated.
+
+ Exit criteria: repo no longer depends on monolithic file.
+
+### Phase 4 — optional behavior improvements (post-split)
+
+ Only after stable split:
+ - stage-specific retry hooks
+ - better error taxonomy
+ - packet processing simplification
+
+ ────────────────────────────────────────────────────────────────────────────────
+
+ Risk controls
+
+ - No logic changes during Phase 1–2 (move-only discipline).
+ - Commit in small slices (one subsystem per commit).
+ - Run tests after each slice.
+ - Keep fallback shim until the very end.
+
+
+
+ Suggested commit sequence
+
+ 1. test(flows): add guardrail tests for split
+ 2. refactor(flows): introduce flows package and compatibility exports
+ 3. refactor(flows): move media-list helpers
+ 4. refactor(flows): move photo download flow
+ 5. refactor(flows): move video flow + extraction helpers
+ 6. refactor(flows): migrate imports and remove legacy shim
+
+
+
+
+
+-----
+-----
+
+
+
+
 ## ColumnsBot refactoring suggestions
 
 ### Biggest opportunities (in priority order)
