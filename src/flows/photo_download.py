@@ -5,7 +5,7 @@ import time
 import tempfile
 from collections import deque
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from src.constants import CAMERA_IP
 from src.protocol import (
