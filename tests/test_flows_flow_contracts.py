@@ -89,7 +89,7 @@ class TestFlowsFlowContracts(unittest.TestCase):
             body = bytes([0xD1, 0x03, (seq >> 8) & 0xFF, seq & 0xFF]) + b"x"
             return 0xD0, body, b""
 
-        with patch("src.flows.legacy.unpack_f1", side_effect=fake_unpack):
+        with patch("src.flows.photo_download.unpack_f1", side_effect=fake_unpack):
             res = flows_legacy.send_photo_download_flow(
                 session,
                 dir_num=100,
