@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.flows import _parse_artemis_v4_payload_header  # noqa: E402
+from src.flows.video_download import _parse_artemis_v4_payload_header  # noqa: E402
 from src.protocol import parse_artemis_records_strict, unpack_f1  # noqa: E402
 
 

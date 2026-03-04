@@ -7,7 +7,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from src.flows import (  # noqa: E402
+from src.flows.media_list import (  # noqa: E402
     _collect_media_entries,
     _is_photo_entry,
     _is_video_entry,

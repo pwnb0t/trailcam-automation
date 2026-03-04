@@ -7,7 +7,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from src.flows import _parse_artemis_v4_payload_header  # noqa: E402
+from src.flows.video_download import _parse_artemis_v4_payload_header  # noqa: E402
 
 
 def _build_v4_payload(

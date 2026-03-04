@@ -9,7 +9,12 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from src.constants import CAMERA_IP  # noqa: E402
-from src.flows import legacy as flows_legacy  # noqa: E402
+from src.flows.photo_download import send_photo_download_flow  # noqa: E402
+from src.flows.video_download import (  # noqa: E402
+    _order_seq16_from_anchor,
+    _seq16_missing_from_anchor,
+    send_video_download_flow_item,
+)
 
 
 class _FakeClient:
@@ -65,9 +70,9 @@ def _mk_session(client, *, listen_s=0.2, idle_s=0.01, debug=False):
 class TestFlowsFlowContracts(unittest.TestCase):
     def test_seq16_order_and_missing_wraparound(self):
         keys = [0xFFFE, 0x0000, 0x0002, 0xFFFF]
-        ordered = flows_legacy._order_seq16_from_anchor(keys, anchor=0xFFFE)
+        ordered = _order_seq16_from_anchor(keys, anchor=0xFFFE)
         self.assertEqual(ordered, [0xFFFE, 0xFFFF, 0x0000, 0x0002])
-        missing = flows_legacy._seq16_missing_from_anchor(keys, anchor=0xFFFE)
+        missing = _seq16_missing_from_anchor(keys, anchor=0xFFFE)
         # Expected sequence span from FFFE to 0002 has 5 values; we provided 4.
         self.assertEqual(missing, 1)
 
@@ -90,7 +95,7 @@ class TestFlowsFlowContracts(unittest.TestCase):
             return 0xD0, body, b""
 
         with patch("src.flows.photo_download.unpack_f1", side_effect=fake_unpack):
-            res = flows_legacy.send_photo_download_flow(
+            res = send_photo_download_flow(
                 session,
                 dir_num=100,
                 media_num=1,
@@ -112,7 +117,7 @@ class TestFlowsFlowContracts(unittest.TestCase):
         session = _mk_session(client, listen_s=0.05, idle_s=0.01, debug=False)
 
         with self.assertRaisesRegex(RuntimeError, "No D0 subtype=0x02 chunks captured"):
-            flows_legacy.send_video_download_flow_item(
+            send_video_download_flow_item(
                 session,
                 dir_num=100,
                 media_num=2,
