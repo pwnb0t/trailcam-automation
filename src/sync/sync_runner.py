@@ -13,7 +13,6 @@ from src.command.path_utils import camera_media_root, media_file_path
 from src.config import ClientConfig, PathsConfig, RunnerConfig
 from src.connection.connection import connect_and_login
 from src.flows import download_photo_to_out_item, send_video_download_flow_item
-from src.notify.email_notifier import EmailNotifier
 from src.sync.sync_config import SyncConfig
 from src.sync.manifest import build_staging_manifest, build_trailcam_manifest, compute_missing
 from src.sync.organize import organize_one
@@ -39,7 +38,6 @@ class SyncRunner:
         self.state_store = state_store
         self.final_media_dir = Path(cfg.final_media_dir)
         self.dupes_dir = Path(cfg.dupes_dir)
-        self.notifier: Optional[EmailNotifier] = cfg.notifier
         self.debug = bool(cfg.debug)
         self.dry_run = bool(cfg.dry_run)
         self.stage_only = bool(cfg.stage_only)
@@ -53,15 +51,8 @@ class SyncRunner:
             except Exception as e:
                 all_ok = False
                 print(f"[{alias}] failed: {e}")
-                if self.notifier is not None:
-                    try:
-                        self.notifier.send_failure(
-                            camera_alias=alias,
-                            error=str(e),
-                            details=traceback.format_exc(),
-                        )
-                    except Exception as notify_err:
-                        print(f"[{alias}] failure email send failed: {notify_err}")
+                if self.debug:
+                    print(traceback.format_exc())
         return all_ok
 
     async def run_camera(self, alias: str) -> None:
