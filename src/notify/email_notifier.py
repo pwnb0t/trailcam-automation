@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import smtplib
 import subprocess
 from email.message import EmailMessage
@@ -43,6 +44,8 @@ class EmailNotifier:
             smtp.send_message(msg)
 
     def enabled_for_failure(self) -> bool:
+        if str(os.getenv("TRAILCAM_SUPPRESS_FAILURE_EMAIL", "")).strip().lower() in {"1", "true", "yes", "on"}:
+            return False
         return bool(self.cfg.enabled) and ("failure" in {x.lower() for x in self.cfg.notify_on})
 
     @staticmethod

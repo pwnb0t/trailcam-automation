@@ -10,8 +10,9 @@ Group=pwnb0t
 WorkingDirectory=/home/pwnb0t/g/trailcam-automation
 Environment=PYTHONUNBUFFERED=1
 # Retry policy for one timer-triggered invocation.
-Environment=TRAILCAM_SYNC_MAX_ATTEMPTS=3
+Environment=TRAILCAM_SYNC_MAX_ATTEMPTS=5
 Environment=TRAILCAM_SYNC_RETRY_DELAY_S=300
+Environment=TRAILCAM_SCHEDULED=true
 # Optional path to 1Password/env file consumed by scripts/run_sync.sh.
 Environment=TRAILCAM_OP_ENV_FILE=/home/pwnb0t/.config/openclaw/op.env
 ExecStart=/home/pwnb0t/g/trailcam-automation/scripts/run_sync.sh
