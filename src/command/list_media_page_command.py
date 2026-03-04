@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from src.command.command import Command, CommandError
-from src.flows import fetch_media_list_page
+from src.flows.media_list import fetch_media_list_page
 from src.session import TrailCamSession
 
 

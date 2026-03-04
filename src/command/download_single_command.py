@@ -5,11 +5,9 @@ from typing import Any, Dict, Optional
 
 from src.command.command import Command, CommandError
 from src.command.path_utils import camera_media_root, media_file_path
-from src.flows import (
-    fetch_media_list_page,
-    download_photo_to_out_item,
-    send_video_download_flow_item,
-)
+from src.flows.media_list import fetch_media_list_page
+from src.flows.photo_download import download_photo_to_out_item
+from src.flows.video_download import send_video_download_flow_item
 from src.session import TrailCamSession
 
 
