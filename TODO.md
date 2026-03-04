@@ -1,23 +1,7 @@
 # TrailCam Automation TODO
 
-## 2) Retry strategy for media download failures
-- Document current retry flow clearly:
-  - in-app retry behavior
-  - systemd/service-level retry behavior
-- Evaluate whether bad/partial media should trigger:
-  - re-request of item/chunk within run, or
-  - full run retry only
-- Tune retry counts/backoff for both layers to reduce false terminal failures.
-- Keep strict validation where it protects data integrity, but avoid failing the whole run for recoverable single-item issues when possible.
 
-## 3) Retry/failure observability and stats
-- Add per-host retry metrics (`petepad`, `piiter`).
-
-
------
-
-# ColumnsBot refactoring suggestions
-
+## ColumnsBot refactoring suggestions
 
 ### Biggest opportunities (in priority order)
 
@@ -59,7 +43,7 @@
  - Standardize exception types by stage (connect/list/download/verify/clear/organize).
  - Then retries can be stage-aware (retry transient network, fail-fast on deterministic format issues).
 
- -----
+-----
 
  ### Quick wins (low effort, good return)
 
@@ -67,6 +51,25 @@
  - Add a small “sync outcome email policy” doc (docs/alerts.md) so behavior is explicit.
  - Add tests for the new notification contract (scheduled success/final failure path).
 
- -----
 
- If you want, I can turn this into a concrete Refactor Plan v1 with 2-week phases (safe first, then deeper architecture) and start with the top quick win set.
+
+-----
+
+
+# Future ideas
+
+## Retry strategy for media download failures
+- Document current retry flow clearly:
+  - in-app retry behavior
+  - systemd/service-level retry behavior
+- Evaluate whether bad/partial media should trigger:
+  - re-request of item/chunk within run, or
+  - full run retry only
+- Tune retry counts/backoff for both layers to reduce false terminal failures.
+- Keep strict validation where it protects data integrity, but avoid failing the whole run for recoverable single-item issues when possible.
+
+## Retry/failure observability and stats
+- Add per-host retry metrics (`petepad`, `piiter`).
+
+
+-----
