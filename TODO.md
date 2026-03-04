@@ -11,7 +11,10 @@
 - Keep strict validation where it protects data integrity, but avoid failing the whole run for recoverable single-item issues when possible.
 
 ## 3) Retry/failure observability and stats
-- Add per-host retry metrics (`petepad`, `piiter`).
+- [x] Add per-host retry metrics (`petepad`, `piiter`).
+  - Implemented scheduler-level metrics sink: `out/state/retry_stats.json`.
+  - Metrics update in `scripts/run_sync.sh` on success/final-failure.
+  - Visible via `trailcam_sync.py --status` under "Retry/failure stats".
 
 
 -----

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+import socket
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -88,6 +90,51 @@ def _latest_sync_from_rotated_state(state_path: Path) -> tuple[Optional[datetime
     return best_dt, best_path
 
 
+def _print_retry_stats(state_store: SyncStateStore) -> None:
+    stats_path = state_store.path.parent / "retry_stats.json"
+    print("")
+    print("Retry/failure stats (scheduler-level):")
+    if not stats_path.exists():
+        print(f"- no stats file yet ({stats_path})")
+        return
+
+    try:
+        raw = json.loads(stats_path.read_text("utf-8"))
+    except Exception as e:
+        print(f"- failed to parse stats file: {stats_path}")
+        print(f"  error={e}")
+        return
+
+    hosts = raw.get("hosts") if isinstance(raw, dict) else None
+    if not isinstance(hosts, dict) or not hosts:
+        print(f"- no host metrics recorded yet ({stats_path})")
+        return
+
+    local_candidates = [socket.gethostname() or "", socket.gethostname().split(".")[0] if socket.gethostname() else ""]
+    local_short = local_candidates[1]
+
+    for host in sorted(hosts.keys()):
+        h = hosts.get(host) or {}
+        runs_total = int(h.get("runs_total", 0))
+        runs_succeeded = int(h.get("runs_succeeded", 0))
+        runs_failed = int(h.get("runs_failed", 0))
+        runs_with_retry = int(h.get("runs_with_retry", 0))
+        retry_attempts_total = int(h.get("retry_attempts_total", 0))
+        success_rate = (runs_succeeded / runs_total * 100.0) if runs_total > 0 else 0.0
+        avg_retry_attempts = (retry_attempts_total / runs_total) if runs_total > 0 else 0.0
+        marker = " (this host)" if host in local_candidates or host == local_short else ""
+        print(f"- {host}{marker}: runs={runs_total} success={runs_succeeded} failure={runs_failed} success_rate={success_rate:.1f}%")
+        print(
+            "  "
+            + f"runs_with_retry={runs_with_retry} retry_attempts_total={retry_attempts_total} avg_retry_attempts_per_run={avg_retry_attempts:.2f}"
+        )
+        print(
+            "  "
+            + f"last_result={h.get('last_result', '(unknown)')} last_attempts={h.get('last_attempts_used', '?')}/{h.get('last_max_attempts', '?')} "
+            + f"last_exit={h.get('last_exit_code', '?')} at={h.get('last_run_at', '(unknown)')}"
+        )
+
+
 def _print_status(state_store: SyncStateStore, dry_run: bool) -> None:
     _print_systemd_sync_status()
     print("")
@@ -100,6 +147,7 @@ def _print_status(state_store: SyncStateStore, dry_run: bool) -> None:
             print(f"Latest completed sync: {last_dt.strftime('%Y-%m-%d %H:%M:%S')} ({last_path})")
         print("Current state: not started")
         print("Next step: run trailcam_sync.py to start a new sync run.")
+        _print_retry_stats(state_store)
         return
 
     try:
@@ -112,6 +160,7 @@ def _print_status(state_store: SyncStateStore, dry_run: bool) -> None:
             print(f"Latest completed sync: {last_dt.strftime('%Y-%m-%d %H:%M:%S')} ({last_path})")
         else:
             print("Latest completed sync: (none found)")
+        _print_retry_stats(state_store)
         return
 
     print(f"State file: {state_path}")
@@ -121,6 +170,7 @@ def _print_status(state_store: SyncStateStore, dry_run: bool) -> None:
     if not cameras:
         print("No camera state entries recorded yet.")
         print("Next step: run trailcam_sync.py to initialize per-camera state.")
+        _print_retry_stats(state_store)
         return
 
     print("")
@@ -136,6 +186,8 @@ def _print_status(state_store: SyncStateStore, dry_run: bool) -> None:
         if errors:
             print(f"  last_error={errors[-1]}")
         print(f"  next={_next_step_for_status(status, dry_run)}")
+
+    _print_retry_stats(state_store)
 
 
 async def main() -> None:

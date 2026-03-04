@@ -5,6 +5,7 @@ ROOT_DIR="/home/pwnb0t/g/trailcam-automation"
 CONFIG_PATH="${TRAILCAM_CONFIG:-$ROOT_DIR/config.yaml}"
 LOCK_PATH="$ROOT_DIR/out/state/trailcam-sync.lock"
 LOG_DIR="$ROOT_DIR/out/logs"
+STATS_PATH="$ROOT_DIR/out/state/retry_stats.json"
 SYNC_OVERRIDE="$ROOT_DIR/scripts/sync.sh"
 SYNC_FALLBACK="$ROOT_DIR/scripts/sync.example.sh"
 
@@ -37,6 +38,78 @@ notifier.send_message(
     subject=os.environ["TRAILCAM_EMAIL_SUBJECT"],
     body=os.environ["TRAILCAM_EMAIL_BODY"],
 )
+PY
+}
+
+record_retry_stats() {
+  local result="$1"         # success|failure
+  local attempts_used="$2"  # integer >= 1
+  local max_attempts="$3"   # integer >= 1
+  local exit_code="$4"      # integer exit code
+  local host
+  host="$(hostname -s 2>/dev/null || hostname || echo unknown-host)"
+  local ts
+  ts="$(date -Is)"
+
+  TRAILCAM_RETRY_STATS_PATH="$STATS_PATH" \
+  TRAILCAM_RETRY_HOST="$host" \
+  TRAILCAM_RETRY_RESULT="$result" \
+  TRAILCAM_RETRY_ATTEMPTS_USED="$attempts_used" \
+  TRAILCAM_RETRY_MAX_ATTEMPTS="$max_attempts" \
+  TRAILCAM_RETRY_EXIT_CODE="$exit_code" \
+  TRAILCAM_RETRY_TIMESTAMP="$ts" \
+  /usr/bin/env python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path(os.environ["TRAILCAM_RETRY_STATS_PATH"])
+path.parent.mkdir(parents=True, exist_ok=True)
+
+host = os.environ["TRAILCAM_RETRY_HOST"]
+result = os.environ["TRAILCAM_RETRY_RESULT"].strip().lower()
+attempts_used = max(1, int(os.environ["TRAILCAM_RETRY_ATTEMPTS_USED"]))
+max_attempts = max(1, int(os.environ["TRAILCAM_RETRY_MAX_ATTEMPTS"]))
+exit_code = int(os.environ["TRAILCAM_RETRY_EXIT_CODE"])
+ts = os.environ["TRAILCAM_RETRY_TIMESTAMP"]
+retry_attempts = max(0, attempts_used - 1)
+
+raw = {}
+if path.exists():
+    try:
+        raw = json.loads(path.read_text("utf-8"))
+    except Exception:
+        raw = {}
+
+if not isinstance(raw, dict):
+    raw = {}
+raw.setdefault("version", 1)
+hosts = raw.setdefault("hosts", {})
+if not isinstance(hosts, dict):
+    hosts = {}
+    raw["hosts"] = hosts
+
+h = hosts.setdefault(host, {})
+if not isinstance(h, dict):
+    h = {}
+    hosts[host] = h
+
+h["runs_total"] = int(h.get("runs_total", 0)) + 1
+if result == "success":
+    h["runs_succeeded"] = int(h.get("runs_succeeded", 0)) + 1
+else:
+    h["runs_failed"] = int(h.get("runs_failed", 0)) + 1
+if retry_attempts > 0:
+    h["runs_with_retry"] = int(h.get("runs_with_retry", 0)) + 1
+h["retry_attempts_total"] = int(h.get("retry_attempts_total", 0)) + retry_attempts
+
+h["last_run_at"] = ts
+h["last_result"] = result
+h["last_attempts_used"] = attempts_used
+h["last_max_attempts"] = max_attempts
+h["last_exit_code"] = exit_code
+
+path.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n", "utf-8")
 PY
 }
 
@@ -80,6 +153,8 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     ts="$(date -Is)"
     echo "[$ts] trailcam sync succeeded on attempt $attempt/$MAX_ATTEMPTS"
 
+    record_retry_stats "success" "$attempt" "$MAX_ATTEMPTS" "$rc"
+
     if is_truthy "${TRAILCAM_SCHEDULED:-0}"; then
       host="$(hostname -s 2>/dev/null || hostname || echo unknown-host)"
       subject="Trailcam Scheduled Sync SUCCESS"
@@ -106,6 +181,7 @@ done
 
 ts="$(date -Is)"
 echo "[$ts] trailcam sync failed after $MAX_ATTEMPTS attempts"
+record_retry_stats "failure" "$MAX_ATTEMPTS" "$MAX_ATTEMPTS" "$rc"
 
 if is_truthy "${TRAILCAM_SCHEDULED:-0}"; then
   host="$(hostname -s 2>/dev/null || hostname || echo unknown-host)"
