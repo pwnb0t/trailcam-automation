@@ -143,7 +143,7 @@ Email behavior for scheduled runs:
 - exactly one email on final outcome
   - `Trailcam Scheduled Sync SUCCESS` (if any retry succeeds)
   - `Trailcam Scheduled Sync FINAL FAILURE` (after all retries fail)
-- per-camera failure emails from `trailcam_sync.py` are suppressed in this scheduled wrapper flow.
+- `trailcam_sync.py` does not send emails; scheduled outcome emails are sent by `scripts/run_sync.sh`.
 
 1Password/env-backed secrets for sync/email:
 - `scripts/sync.example.sh` runs plain `trailcam_sync.py` (no `op` wrapper).

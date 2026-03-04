@@ -63,5 +63,3 @@ alerts:
       - "you@example.com"
     subject_prefix: "[TrailCam Sync]"
     starttls: true
-    notify_on:
-      - failure

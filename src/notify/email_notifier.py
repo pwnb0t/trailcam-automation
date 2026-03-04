@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import os
 import smtplib
-import subprocess
 from email.message import EmailMessage
-from typing import Optional
 
 from src.config import EmailAlertsConfig
 
@@ -43,45 +40,3 @@ class EmailNotifier:
             smtp.login(self.cfg.smtp_user, self.cfg.smtp_app_password)
             smtp.send_message(msg)
 
-    def enabled_for_failure(self) -> bool:
-        if str(os.getenv("TRAILCAM_SUPPRESS_FAILURE_EMAIL", "")).strip().lower() in {"1", "true", "yes", "on"}:
-            return False
-        return bool(self.cfg.enabled) and ("failure" in {x.lower() for x in self.cfg.notify_on})
-
-    @staticmethod
-    def _latest_dmesg_lines(line_count: int = 120) -> str:
-        """Best-effort kernel log tail for failure correlation."""
-        try:
-            proc = subprocess.run(
-                ["dmesg", "-T"],
-                capture_output=True,
-                text=True,
-                timeout=8,
-                check=False,
-            )
-        except Exception as e:
-            return f"(unable to read dmesg: {e})"
-
-        if proc.returncode != 0:
-            err = (proc.stderr or "").strip() or f"exit_code={proc.returncode}"
-            return f"(unable to read dmesg: {err})"
-
-        lines = (proc.stdout or "").splitlines()
-        if not lines:
-            return "(dmesg empty)"
-        tail = lines[-max(1, int(line_count)) :]
-        return "\n".join(tail)
-
-    def send_failure(self, *, camera_alias: str, error: str, details: Optional[str] = None) -> None:
-        if not self.enabled_for_failure():
-            return
-
-        subject = f"{self.cfg.subject_prefix} camera={camera_alias} status=FAILED"
-        body_lines = [
-            f"Camera: {camera_alias}",
-            f"Error: {error}",
-        ]
-        if details:
-            body_lines.extend(["", "Details:", details])
-        body_lines.extend(["", "Latest dmesg:", self._latest_dmesg_lines()])
-        self.send_message(subject=subject, body="\n".join(body_lines))

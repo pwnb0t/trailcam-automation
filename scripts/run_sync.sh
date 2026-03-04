@@ -74,9 +74,7 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     exit 2
   fi
 
-  # Suppress per-camera failure emails from trailcam_sync.py. We only send one
-  # daily outcome email from this wrapper after all retries are complete.
-  TRAILCAM_CONFIG="$CONFIG_PATH" TRAILCAM_SUPPRESS_FAILURE_EMAIL=1 /usr/bin/env bash "$SYNC_SCRIPT"
+  TRAILCAM_CONFIG="$CONFIG_PATH" /usr/bin/env bash "$SYNC_SCRIPT"
   rc=$?
   if [ "$rc" -eq 0 ]; then
     ts="$(date -Is)"

@@ -78,7 +78,6 @@ class EmailAlertsConfig:
     to_emails: List[str] = field(default_factory=list)
     subject_prefix: str = "[TrailCam Sync]"
     starttls: bool = True
-    notify_on: List[str] = field(default_factory=lambda: ["failure"])
 
 
 @dataclass(frozen=True)
@@ -311,7 +310,6 @@ def load_config(path: str | Path) -> AppConfig:
         to_emails=to_emails,
         subject_prefix=str(email_raw.get("subject_prefix", "[TrailCam Sync]")),
         starttls=_must_bool(email_raw.get("starttls", True), "alerts.email.starttls"),
-        notify_on=[str(x).strip().lower() for x in email_raw.get("notify_on", ["failure"]) if str(x).strip()],
     )
     alerts_cfg = AlertsConfig(email=email_cfg)
 
