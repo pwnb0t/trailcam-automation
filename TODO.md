@@ -1,106 +1,10 @@
 # TrailCam Automation TODO
 
-
-# In progress refactor of src/flows.py (item 1)
-
-Phased execution plan
-
- ### Phase 0 — safety net first (done)
-
- 1. Add/confirm tests around current behavior used by sync path:
- - media list normalization
- - video header/decrypt helpers
- - any current pcap regression tests
- 2. Snapshot current signatures used by callers (sync_runner, command modules).
-
- Exit criteria: tests green before refactor.
-
- ────────────────────────────────────────────────────────────────────────────────
-
- ### Phase 1 — mechanical split (no behavior change) (done)
-
- 1. Create src/flows/ package.
- 2. Move code in chunks:
- - list/normalize helpers → media_list.py
- - photo flow function(s) → photo_download.py
- - video flow function(s) + internal helpers → video_download.py
- - extraction helpers → extract.py
- 3. Keep compatibility:
- - src/flows/__init__.py re-exports old function names.
- - keep src/flows.py as a thin shim import/re-export during transition (optional but safest).
-
- Exit criteria: all existing imports still work; tests unchanged and green.
-
- ────────────────────────────────────────────────────────────────────────────────
-
- ### Phase 2 — untangle internal coupling (done)
-
- 1. Move shared constants/helpers into common.py.
- 2. Reduce cross-imports between video/photo modules.
- 3. Isolate stream-state structures (ack counters, seq windows) into small dataclasses.
-
- Exit criteria: no circular imports, cleaner boundaries, behavior same.
-
- ────────────────────────────────────────────────────────────────────────────────
-
- ### Phase 3 — caller cleanup
-
- 1. Update callers to import from new package paths directly.
- 2. Remove shim (src/flows.py) once all callsites are migrated.
-
- Exit criteria: repo no longer depends on monolithic file.
-
-### Phase 4 — optional behavior improvements (post-split)
-
- Only after stable split:
- - stage-specific retry hooks
- - better error taxonomy
- - packet processing simplification
-
- ────────────────────────────────────────────────────────────────────────────────
-
- Risk controls
-
- - No logic changes during Phase 1–2 (move-only discipline).
- - Commit in small slices (one subsystem per commit).
- - Run tests after each slice.
- - Keep fallback shim until the very end.
-
-
-
- Suggested commit sequence
-
- 1. test(flows): add guardrail tests for split
- 2. refactor(flows): introduce flows package and compatibility exports
- 3. refactor(flows): move media-list helpers
- 4. refactor(flows): move photo download flow
- 5. refactor(flows): move video flow + extraction helpers
- 6. refactor(flows): migrate imports and remove legacy shim
-
-
-
-
-
------
------
-
-
-
-
 ## ColumnsBot refactoring suggestions
 
 ### Biggest opportunities (in priority order)
 
-1. Split src/flows.py (very high impact)
- - It’s currently the biggest hotspot (~1200 LOC, one function ~466 LOC).
- - It’s doing too many jobs: protocol heartbeats/acks, media transfer orchestration, parsing, file output.
- - Refactor into:
- - transport/ (ack/heartbeat/session packet IO)
- - download/ (photo/video orchestration)
- - parsers/ (ARTEMIS + record decoding)
- - This will reduce bug surface and make retry logic easier to reason about.
-
-2. Break up src/config.py (high impact)
+1. Break up src/config.py (high impact)
  - Also large (~600 LOC), with a heavy load_config.
  - Split into:
  - schema/dataclasses
@@ -108,24 +12,35 @@ Phased execution plan
  - validation rules
  - Right now config evolution is expensive and easy to regress.
 
-3. Formalize sync state transitions (high impact)
+Notes: We must make sure we plan this one out. The idea behind the config was supposed to be:
+* Having strongly typed classes to represent the config file rather than loose calls like `cfg.undefined_dict.undefined_var`
+* The Session is supposed to be easy to pass around and contain all the stuff for the running session to make it easy.
+  * Before, every method call had a pile of arguments (anywhere from a handful to a dozen).
+  * The session and config are supposed to be like context classes that provide the exact configuration and state of the app
+  * Most arguments were just config items, or possibly a runtime setup item (like login_token_u32)
+  * It made calls like: `DownloadMediaPageCommand(session)` much more simplified
+  * The Config is supposed to have a similar purpose as Session, but it's just the "cold setup" items (config file and overrides)
+* We could consider just going back a loosely defined Config
+* We could consider using dependency-injector like we did with the `ownbot` project
+
+2. Formalize sync state transitions (high impact)
  - Status transitions are spread around with string checks/dict mutation.
  - Introduce a transition layer (pending -> download -> verify -> clear -> organize -> done/error) with guards.
  - Benefits: fewer edge-case bugs, easier retries/recovery, cleaner telemetry.
 
-4. Retire/relocate notifier module usage (medium)
+3. Retire/relocate notifier module usage (medium)
  - Python app no longer owns alerting; notifier is now wrapper-owned utility.
  - Either:
  - keep EmailNotifier as explicit “ops utility”, or
  - move scheduled outcome email send into a small dedicated CLI module and keep shell wrapper minimal.
  - This removes “half in shell / half in app” ambiguity.
 
-5. Reduce hardcoded paths in scripts/systemd workflow (medium)
+4. Reduce hardcoded paths in scripts/systemd workflow (medium)
  - A lot of /home/pwnb0t/g/trailcam-automation assumptions.
  - Consider templated install + dynamic repo root discovery.
  - Makes host migrations less brittle.
 
-6. Improve retry/error taxonomy (medium)
+5. Improve retry/error taxonomy (medium)
  - Standardize exception types by stage (connect/list/download/verify/clear/organize).
  - Then retries can be stage-aware (retry transient network, fail-fast on deterministic format issues).
 
