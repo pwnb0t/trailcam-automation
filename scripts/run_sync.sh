@@ -10,7 +10,7 @@ SYNC_FALLBACK="$ROOT_DIR/scripts/sync.example.sh"
 
 # Retry policy for one scheduled run.
 MAX_ATTEMPTS="${TRAILCAM_SYNC_MAX_ATTEMPTS:-5}"
-RETRY_DELAY_S="${TRAILCAM_SYNC_RETRY_DELAY_S:-300}"
+RETRY_DELAY_S="${TRAILCAM_SYNC_RETRY_DELAY_S:-60}"
 
 is_truthy() {
   case "${1:-}" in
