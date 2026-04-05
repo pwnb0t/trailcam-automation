@@ -141,10 +141,6 @@ class OrganizeConfig:
     # 0=Monday .. 6=Sunday
     week_boundary_weekday: int = 6
     week_boundary_hour_local: int = 8
-    # Interpretation of camera mediaTime unix value:
-    # - local_epoch: camera encoded local wall-clock as epoch-like integer
-    # - utc_epoch: standard unix epoch in UTC
-    media_time_mode: str = "local_epoch"
 
 
 @dataclass(frozen=True)
@@ -276,13 +272,9 @@ def load_config(path: str | Path) -> AppConfig:
     )
     if week_boundary_hour_local < 0 or week_boundary_hour_local > 23:
         raise ValueError("organize.week_boundary_hour_local must be 0..23")
-    media_time_mode = str(organize_raw.get("media_time_mode", "local_epoch")).strip().lower()
-    if media_time_mode not in {"local_epoch", "utc_epoch"}:
-        raise ValueError("organize.media_time_mode must be 'local_epoch' or 'utc_epoch'")
     organize_cfg = OrganizeConfig(
         week_boundary_weekday=weekday_map[weekday_raw],
         week_boundary_hour_local=week_boundary_hour_local,
-        media_time_mode=media_time_mode,
     )
 
     alerts_raw = raw.get("alerts") or {}

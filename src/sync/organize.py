@@ -11,16 +11,20 @@ from typing import Any, Dict, Optional, Tuple
 from src.sync.sync_state import MediaKey
 
 
-def _parse_media_time_unix(value: Any, *, mode: str = "local_epoch") -> Optional[datetime]:
+def _parse_media_time_unix(value: Any) -> Optional[datetime]:
+    """Decode TrailCam mediaTime to local wall-clock datetime.
+
+    TrailCam encodes local wall-clock as an epoch-like integer ("local-epoch").
+    """
     try:
         ts = int(value)
     except Exception:
         return None
-    if mode == "utc_epoch":
-        dt = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone()
-    else:
-        # Camera reports mediaTime as epoch-like value tied to local wall-clock.
-        dt = datetime.fromtimestamp(ts).astimezone()
+
+    local_tz = datetime.now().astimezone().tzinfo
+    assert local_tz is not None
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=local_tz)
+
     if dt.year < 2018 or dt.year > 2100:
         return None
     return dt
@@ -142,10 +146,9 @@ def choose_timestamp(
     meta: Optional[Dict[str, Any]],
     staged_path: Path,
     first_seen_at: Optional[str],
-    media_time_mode: str = "local_epoch",
 ) -> Tuple[OrganizeDecision, str]:
     if meta:
-        dt = _parse_media_time_unix(meta.get("mediaTime"), mode=media_time_mode)
+        dt = _parse_media_time_unix(meta.get("mediaTime"))
         if dt is not None:
             return OrganizeDecision(when_local=dt, ts_source="mediaTime"), (first_seen_at or _iso_now())
 
@@ -182,14 +185,12 @@ def organize_one(
     run_id: str,
     week_boundary_weekday: int = 6,
     week_boundary_hour_local: int = 8,
-    media_time_mode: str = "local_epoch",
 ) -> Dict[str, Any]:
     decision, first_seen = choose_timestamp(
         key=key,
         meta=meta,
         staged_path=staged_path,
         first_seen_at=first_seen_at,
-        media_time_mode=media_time_mode,
     )
     bucket = _week_bucket_label(
         decision.when_local,

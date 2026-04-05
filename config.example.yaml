@@ -41,10 +41,6 @@ organize:
   # 0=Monday..6=Sunday internally; config accepts weekday name.
   week_boundary_weekday: "sunday"
   week_boundary_hour_local: 11
-  # Camera mediaTime interpretation:
-  # - local_epoch: camera encodes local wall-clock in epoch-like integer (TrailCam default)
-  # - utc_epoch: standard unix epoch in UTC
-  media_time_mode: "local_epoch"
 
 alerts:
   email:
