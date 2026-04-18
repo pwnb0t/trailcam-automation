@@ -7,6 +7,8 @@ LOCK_PATH="$ROOT_DIR/out/state/trailcam-sync.lock"
 LOG_DIR="$ROOT_DIR/out/logs"
 SYNC_OVERRIDE="$ROOT_DIR/scripts/sync.sh"
 SYNC_FALLBACK="$ROOT_DIR/scripts/sync.example.sh"
+MOUNT_ROOT="${TRAILCAM_MOUNT_ROOT:-/mnt/trailcam}"
+STAGING_DIR="${TRAILCAM_STAGING_DIR:-$MOUNT_ROOT/staging}"
 
 # Retry policy for one scheduled run.
 MAX_ATTEMPTS="${TRAILCAM_SYNC_MAX_ATTEMPTS:-5}"
@@ -40,6 +42,59 @@ notifier.send_message(
 PY
 }
 
+try_cleanup_stale_lock() {
+  local pids pid comm any
+  any=0
+
+  if ! command -v fuser >/dev/null 2>&1; then
+    return 1
+  fi
+
+  read -r -a pids <<<"$(fuser "$LOCK_PATH" 2>/dev/null || true)"
+  if [ "${#pids[@]}" -eq 0 ]; then
+    return 1
+  fi
+
+  for pid in "${pids[@]}"; do
+    comm="$(ps -p "$pid" -o comm= 2>/dev/null | tr -d '[:space:]')"
+    if [ -z "$comm" ]; then
+      continue
+    fi
+    any=1
+    if [ "$comm" != "op" ]; then
+      return 1
+    fi
+  done
+
+  if [ "$any" -eq 1 ]; then
+    echo "lock held by op daemon only; restarting op daemon to clear stale lock"
+    pkill -f '^op daemon$' >/dev/null 2>&1 || true
+    sleep 1
+    return 0
+  fi
+
+  return 1
+}
+
+ensure_mount_ready() {
+  if mountpoint -q "$MOUNT_ROOT"; then
+    return 0
+  fi
+
+  echo "mount missing at $MOUNT_ROOT; attempting remount"
+  if ! sudo -n mount "$MOUNT_ROOT"; then
+    echo "remount failed for $MOUNT_ROOT" >&2
+    return 1
+  fi
+
+  if ! mountpoint -q "$MOUNT_ROOT"; then
+    echo "remount command returned but $MOUNT_ROOT is still not mounted" >&2
+    return 1
+  fi
+
+  return 0
+}
+
 mkdir -p "$(dirname "$LOCK_PATH")" "$LOG_DIR"
 cd "$ROOT_DIR"
 
@@ -54,8 +109,15 @@ fi
 
 exec 9>"$LOCK_PATH"
 if ! /usr/bin/flock -n 9; then
-  echo "trailcam sync already running; skipping this scheduled invocation"
-  exit 0
+  if try_cleanup_stale_lock; then
+    if ! /usr/bin/flock -n 9; then
+      echo "trailcam sync already running; skipping this scheduled invocation"
+      exit 0
+    fi
+  else
+    echo "trailcam sync already running; skipping this scheduled invocation"
+    exit 0
+  fi
 fi
 
 attempt=1
@@ -74,8 +136,20 @@ while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     exit 2
   fi
 
-  TRAILCAM_CONFIG="$CONFIG_PATH" /usr/bin/env bash "$SYNC_SCRIPT"
-  rc=$?
+  if ! ensure_mount_ready; then
+    rc=1
+  else
+    if [ ! -d "$STAGING_DIR" ]; then
+      echo "staging directory missing: $STAGING_DIR" >&2
+      rc=1
+    elif [ ! -w "$STAGING_DIR" ]; then
+      echo "staging directory is not writable: $STAGING_DIR" >&2
+      rc=1
+    else
+      TRAILCAM_CONFIG="$CONFIG_PATH" /usr/bin/env bash "$SYNC_SCRIPT" 9>&-
+      rc=$?
+    fi
+  fi
   if [ "$rc" -eq 0 ]; then
     ts="$(date -Is)"
     echo "[$ts] trailcam sync succeeded on attempt $attempt/$MAX_ATTEMPTS"
