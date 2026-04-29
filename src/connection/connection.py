@@ -80,6 +80,13 @@ def wifi_has_camera_ip(ifname: str) -> bool:
     return "192.168.43." in out
 
 
+def nmcli_cleanup_connection(ssid: str, ifname: str) -> None:
+    active_ssid = nmcli_active_ssid(ifname)
+    if active_ssid == ssid:
+        subprocess.run(["sudo", "nmcli", "device", "disconnect", ifname], text=True, capture_output=True)
+    subprocess.run(["sudo", "nmcli", "con", "delete", "id", ssid], text=True, capture_output=True)
+
+
 def handshake_prelude(client: TrailCamClient, debug: bool = False, duration_s: float = 3.0) -> None:
     seen_ops = {}
     start = time.time()

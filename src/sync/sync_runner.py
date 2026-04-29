@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from src.command.format_sd_card_command import FormatSdCardCommand
 from src.command.path_utils import camera_media_root, media_file_path
 from src.config import ClientConfig, PathsConfig, RunnerConfig
-from src.connection.connection import connect_and_login
+from src.connection.connection import connect_and_login, nmcli_cleanup_connection
 from src.flows.photo_download import download_photo_to_out_item
 from src.flows.video_download import send_video_download_flow_item
 from src.sync.sync_config import SyncConfig
@@ -161,6 +161,10 @@ class SyncRunner:
         finally:
             try:
                 session.client.close()
+            except Exception:
+                pass
+            try:
+                nmcli_cleanup_connection(session.wifi_ssid, session.cfg.client.wifi_ifname)
             except Exception:
                 pass
 
